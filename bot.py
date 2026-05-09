@@ -50,13 +50,14 @@ class BroadcastState(StatesGroup):
 # KEYBOARDS
 # ═══════════════════════════════════════
 def main_kb(user_id: int = None):
-    vip = is_vip(user_id) if user_id else False
+    vip      = is_vip(user_id) if user_id else False
+    is_admin = user_id in ADMIN_IDS if user_id else False
     buttons = [
         [KeyboardButton(text="📚 So'z o'rgan"), KeyboardButton(text="🧠 Test")],
         [KeyboardButton(text="🔥 Streak"),       KeyboardButton(text="🏆 Reyting")],
         [KeyboardButton(text="👥 Referal"),       KeyboardButton(text="⚙️ Daraja")],
     ]
-    if vip:
+    if is_admin or vip:
         buttons.append([KeyboardButton(text="💎 VIP Panel")])
     else:
         buttons.append([KeyboardButton(text="💎 VIP Sotib olish")])
@@ -755,11 +756,17 @@ async def admin_cmd(message: types.Message):
         await message.answer("❌ Ruxsat yo'q")
         return
     stats = get_stats()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Statistika",       callback_data="adm_stats")],
+        [InlineKeyboardButton(text="📢 Xabar yuborish",   callback_data="adm_broadcast")],
+        [InlineKeyboardButton(text="⏳ Kutilayotgan VIP", callback_data="adm_pending")],
+    ])
     await message.answer(
         f"👨‍💼 <b>ADMIN PANEL</b>\n\n"
-        f"👥 Jami foydalanuvchi: {stats['total']}\n"
-        f"💎 VIP: {stats['vip']}\n"
-        f"⏳ Kutilayotgan VIP: {stats['pending_vip']}"
+        f"👥 Jami foydalanuvchi: <b>{stats['total']}</b>\n"
+        f"💎 VIP: <b>{stats['vip']}</b>\n"
+        f"⏳ Kutilayotgan VIP: <b>{stats['pending_vip']}</b>",
+        reply_markup=kb
     )
 
 @dp.callback_query(F.data == "adm_stats")
@@ -802,19 +809,29 @@ async def broadcast_cmd(message: types.Message, state: FSMContext):
 
 @dp.message(BroadcastState.waiting)
 async def broadcast_send(message: types.Message, state: FSMContext):
+    # BroadcastState ga faqat adminlar kira oladi, lekin tekshirib qo'yamiz
     if message.from_user.id not in ADMIN_IDS:
         await state.clear()
         return
+
+    await message.answer("⏳ Yuborilmoqda...")
     user_ids = get_all_user_ids()
-    sent = 0
+    sent  = 0
+    fail  = 0
+
     for uid in user_ids:
         try:
             await bot.copy_message(uid, message.chat.id, message.message_id)
             sent += 1
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.05)   # Telegram flood limit
         except Exception:
-            pass
-    await message.answer(f"✅ {sent} ta foydalanuvchiga yuborildi.")
+            fail += 1
+
+    await message.answer(
+        f"✅ <b>Xabar yuborildi!</b>\n\n"
+        f"📨 Yuborildi: <b>{sent}</b> ta\n"
+        f"❌ Yuborilmadi: <b>{fail}</b> ta"
+    )
     await state.clear()
 
 # ═══════════════════════════════════════
