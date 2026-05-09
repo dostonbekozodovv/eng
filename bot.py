@@ -14,13 +14,14 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton
 )
 
-from config import BOT_TOKEN, ADMIN_IDS, CARD_NUMBER, CARD_OWNER, VIP_PRICE
+from config import BOT_TOKEN, ADMIN_IDS, CARD_NUMBER, CARD_OWNER, VIP_PRICE, CHANNEL_ID, CHANNEL_USERNAME, MIN_REFERRALS_FOR_BONUS
 from db import (
     get_or_create_user, get_user, update_streak, add_score, add_referral_earnings,
     add_learned_word, set_vip, is_vip, create_vip_request,
     get_stats, get_all_user_ids, get_top_scores, get_top_referrals,
     update_user_level, update_user_group,
-    get_pending_vip_requests, update_vip_request_status
+    get_pending_vip_requests, update_vip_request_status,
+    get_expired_vip_users, get_expiring_soon_vip_users
 )
 from words import words
 
@@ -71,6 +72,28 @@ def level_kb():
     ])
 
 # ═══════════════════════════════════════
+# MAJBURIY KANAL TEKSHIRUVI
+# ═══════════════════════════════════════
+async def check_subscription(user_id: int) -> bool:
+    """Foydalanuvchi kanalga obuna bo'lganmi?"""
+    if not CHANNEL_ID:
+        return True   # CHANNEL_ID sozlanmagan bo'lsa — o'tkazib yuborish
+    try:
+        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        return member.status not in ("left", "kicked", "banned")
+    except Exception as e:
+        logger.error(f"Kanal tekshiruv xatosi: {e}")
+        return True   # Xato bo'lsa bloklashdan ko'ra o'tkazib yuborish
+
+def subscribe_kb() -> InlineKeyboardMarkup:
+    """Kanalga obuna bo'lish tugmasi"""
+    channel_link = CHANNEL_USERNAME if CHANNEL_USERNAME else "https://t.me/c/" + CHANNEL_ID.lstrip("-100")
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}" if CHANNEL_USERNAME else channel_link)],
+        [InlineKeyboardButton(text="✅ Obuna bo'ldim",         callback_data="check_sub")],
+    ])
+
+# ═══════════════════════════════════════
 # /start — referal link bilan
 # ═══════════════════════════════════════
 @dp.message(CommandStart())
@@ -88,6 +111,15 @@ async def cmd_start(message: types.Message, command: CommandObject = None):
 
     user = get_or_create_user(user_id, name, username, ref_id)
     update_streak(user_id)
+
+    # Majburiy kanal tekshiruvi
+    if not await check_subscription(user_id):
+        await message.answer(
+            f"👋 Salom, <b>{name}</b>!\n\n"
+            f"Botdan foydalanish uchun avval kanalimizga obuna bo'ling 👇",
+            reply_markup=subscribe_kb()
+        )
+        return
 
     if ref_id:
         # Referalga xabar yuborish
@@ -114,6 +146,25 @@ async def cmd_start(message: types.Message, command: CommandObject = None):
 # ═══════════════════════════════════════
 # DARAJA TANLASH
 # ═══════════════════════════════════════
+@dp.callback_query(F.data == "check_sub")
+async def check_sub_cb(callback: types.CallbackQuery, command: CommandObject = None):
+    user_id = callback.from_user.id
+    if await check_subscription(user_id):
+        await callback.message.delete()
+        user = get_user(user_id)
+        if not user or not user.get("level"):
+            await callback.message.answer(
+                f"✅ Rahmat! Endi darajangizni tanlang:",
+                reply_markup=level_kb()
+            )
+        else:
+            await callback.message.answer(
+                f"✅ Rahmat! Xush kelibsiz!",
+                reply_markup=main_kb(user_id)
+            )
+    else:
+        await callback.answer("❗ Hali obuna bo'lmadingiz!", show_alert=True)
+
 @dp.callback_query(F.data.startswith("level_"))
 async def set_level(callback: types.CallbackQuery):
     level_map = {
@@ -561,7 +612,7 @@ async def referal_menu(message: types.Message):
         f"👤 Taklif etilganlar: <b>{ref_count} ta</b>\n\n"
         f"<b>Qoidalar:</b>\n"
         f"✅ Havolani do'stlarga yuboring\n"
-        f"✅ Har juma eng ko'p referal qilgan g'olib <b>5 000 so'm</b> yutadi!\n"
+        f"✅ Har juma eng ko'p referal qilgan g'olib <b>10 000 so'm</b> yutadi!\n"
         f"✅ Har taklif uchun +5 ball"
     )
 
@@ -596,6 +647,23 @@ async def vip_buy(message: types.Message):
 async def vip_pay_cb(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(VipState.waiting_name)
     await callback.message.answer("👤 Ism-familiyangizni kiriting (F.I.Sh.):")
+    await callback.answer()
+
+@dp.callback_query(F.data == "vip_renew")
+async def vip_renew_cb(callback: types.CallbackQuery):
+    """VIP tugaganda qayta obuna bo'lish"""
+    user_id = callback.from_user.id
+    await callback.message.answer(
+        f"💎 <b>VIP QAYTA OBUNA</b>\n\n"
+        f"💰 Narxi: <b>{VIP_PRICE:,} so'm / 1 oy</b>\n\n"
+        f"💳 Karta raqami:\n<code>{CARD_NUMBER}</code>\n"
+        f"👤 Karta egasi: <b>{CARD_OWNER}</b>\n\n"
+        f"To'lov qilgach tugmani bosing 👇",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ To'lov qildim", callback_data="vip_pay")],
+            [InlineKeyboardButton(text="❌ Bekor",         callback_data="vip_cancel")],
+        ])
+    )
     await callback.answer()
 
 @dp.callback_query(F.data == "vip_cancel")
@@ -738,13 +806,32 @@ async def vip_panel(message: types.Message):
         await message.answer("❌ Siz VIP emassiz.")
         return
 
-    vip_since = user.get("vip_since")
-    date_str  = vip_since.strftime("%d.%m.%Y") if vip_since else "—"
+    vip_since   = user.get("vip_since")
+    vip_expires = user.get("vip_expires")
+
+    since_str   = vip_since.strftime("%d.%m.%Y") if vip_since else "—"
+
+    if vip_expires:
+        if isinstance(vip_expires, str):
+            from datetime import datetime as _dt
+            vip_expires = _dt.fromisoformat(vip_expires)
+        expires_str = vip_expires.strftime("%d.%m.%Y %H:%M")
+        # Qancha kun qoldi
+        delta = vip_expires - datetime.now()
+        days_left = max(0, delta.days)
+        if days_left <= 3:
+            expire_line = f"⚠️ Tugaydi: <b>{expires_str}</b> ({days_left} kun qoldi!)"
+        else:
+            expire_line = f"📅 Tugaydi: <b>{expires_str}</b> ({days_left} kun qoldi)"
+    else:
+        expire_line = "📅 Muddat: —"
+
     await message.answer(
         f"💎 <b>VIP PANEL</b>\n\n"
-        f"Siz VIP foydalanuvchisiz!\n"
-        f"📅 VIP olgan sana: {date_str}\n\n"
-        f"✅ Barcha imkoniyatlar faol."
+        f"✅ VIP faol\n"
+        f"📅 Boshlangan: <b>{since_str}</b>\n"
+        f"{expire_line}\n\n"
+        f"Barcha VIP imkoniyatlar faol. 🚀"
     )
 
 # ═══════════════════════════════════════
@@ -837,6 +924,70 @@ async def broadcast_send(message: types.Message, state: FSMContext):
 # ═══════════════════════════════════════
 # HAFTALIK BONUS (har juma 18:00)
 # ═══════════════════════════════════════
+async def vip_expiry_task():
+    """Har soatda VIP muddati o'tganlarni tekshiradi"""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Har 1 soatda
+
+            # 1. Muddati o'tgan VIPlarni o'chirish
+            expired = get_expired_vip_users()
+            for user in expired:
+                set_vip(user["user_id"], False)
+                try:
+                    await bot.send_message(
+                        user["user_id"],
+                        "⚠️ <b>VIP obunangiz tugadi!</b>\n\n"
+                        "1 oylik VIP muddatingiz tugadi.\n"
+                        "Davom ettirish uchun qayta obuna bo'ling 👇",
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(
+                                text="💎 Qayta obuna bo'lish",
+                                callback_data="vip_renew"
+                            )]
+                        ])
+                    )
+                except Exception:
+                    pass
+                # Adminga ham xabar
+                for admin_id in ADMIN_IDS:
+                    try:
+                        await bot.send_message(
+                            admin_id,
+                            f"🔴 VIP tugadi\n"
+                            f"👤 {user['name']} (ID: {user['user_id']})"
+                        )
+                    except Exception:
+                        pass
+
+            # 2. Muddati 24 soatda tugaydigan VIPlarni ogohlantirish
+            expiring = get_expiring_soon_vip_users(hours=24)
+            for user in expiring:
+                expires = user.get("vip_expires")
+                if expires:
+                    if isinstance(expires, str):
+                        expires = datetime.fromisoformat(expires)
+                    expires_str = expires.strftime("%d.%m.%Y %H:%M")
+                    try:
+                        await bot.send_message(
+                            user["user_id"],
+                            f"⏰ <b>VIP obunangiz tugayapti!</b>\n\n"
+                            f"Muddat: <b>{expires_str}</b>\n"
+                            f"Uzilmaslik uchun qayta obuna bo'ling! 💎",
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(
+                                    text="💎 Qayta obuna",
+                                    callback_data="vip_renew"
+                                )]
+                            ])
+                        )
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            logger.error(f"VIP expiry task xatosi: {e}")
+            await asyncio.sleep(300)
+
 async def weekly_bonus_task():
     while True:
         try:
@@ -855,16 +1006,36 @@ async def weekly_bonus_task():
             top_list = get_top_referrals(1)
             if top_list:
                 winner = top_list[0]
-                add_referral_earnings(winner["user_id"], 10000)
-                try:
-                    await bot.send_message(
-                        winner["user_id"],
-                        f"🎉 <b>HAFTALIK G'OLIB!</b>\n\n"
-                        f"Siz bu haftada eng ko'p do'st taklif qildingiz!\n"
-                        f"💰 <b>+5 000 so'm</b> bonus qo'shildi! 🏆"
+                # Kamida MIN_REFERRALS_FOR_BONUS ta taklif bo'lishi shart
+                if winner.get("referral_count", 0) >= MIN_REFERRALS_FOR_BONUS:
+                    add_referral_earnings(winner["user_id"], 10000)
+                    try:
+                        await bot.send_message(
+                            winner["user_id"],
+                            f"🎉 <b>HAFTALIK G'OLIB!</b>\n\n"
+                            f"Siz bu haftada eng ko'p do'st taklif qildingiz!\n"
+                            f"👥 Taklif qilganlar: <b>{winner['referral_count']} ta</b>\n"
+                            f"💰 <b>+10 000 so'm</b> bonus qo'shildi! 🏆"
+                        )
+                    except Exception:
+                        pass
+                else:
+                    # Hech kim 5 tadan ko'p taklif qilmagan
+                    logger.info(
+                        f"Bu hafta g'olib yo'q. "
+                        f"Eng ko'p: {winner.get('referral_count',0)} ta "
+                        f"(kerak: {MIN_REFERRALS_FOR_BONUS})"
                     )
-                except Exception:
-                    pass
+                    for admin_id in ADMIN_IDS:
+                        try:
+                            await bot.send_message(
+                                admin_id,
+                                f"ℹ️ Haftalik bonus berilmadi.\n"
+                                f"Eng ko'p referal: <b>{winner.get('referral_count',0)} ta</b>\n"
+                                f"Talab: kamida <b>{MIN_REFERRALS_FOR_BONUS} ta</b>"
+                            )
+                        except Exception:
+                            pass
         except Exception as e:
             logger.error(f"Haftalik bonus xatosi: {e}")
             await asyncio.sleep(3600)
@@ -877,6 +1048,7 @@ async def main():
     init_db()
     logger.info("✅ Bot ishga tushdi!")
     asyncio.create_task(weekly_bonus_task())
+    asyncio.create_task(vip_expiry_task())
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 if __name__ == "__main__":
