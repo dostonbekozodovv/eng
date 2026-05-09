@@ -1,0 +1,15 @@
+# Telegram bot tokeni (@BotFather dan olinadi)
+BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+
+# Admin ID lar (vergul bilan ajratiladi)
+ADMIN_IDS=123456789,987654321
+
+# Railway PostgreSQL URL (Railway dashboard dan olinadi)
+DATABASE_URL=postgresql://postgres:password@host.railway.app:5432/railway
+
+# To'lov kartasi ma'lumotlari
+CARD_NUMBER=8600 0000 0000 0000
+CARD_OWNER=Ism Familiya
+
+# VIP narxi (so'mda)
+VIP_PRICE=20000
