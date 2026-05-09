@@ -1,6 +1,6 @@
 import psycopg2
 import psycopg2.extras
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from config import DATABASE_URL
 
 def get_conn():
@@ -20,6 +20,7 @@ def init_db():
             last_active DATE,
             is_vip BOOLEAN DEFAULT FALSE,
             vip_since TIMESTAMP,
+            vip_expires TIMESTAMP,
             referred_by BIGINT,
             referral_count INT DEFAULT 0,
             referral_earnings BIGINT DEFAULT 0,
@@ -43,10 +44,12 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         );
     """)
-    # Agar users jadvali mavjud bo'lsa, current_group ustunini qo'shish
-    cur.execute("""
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS current_group INT DEFAULT 1;
-    """)
+    # Mavjud jadvalga yangi ustunlarni qo'shish (xato bermaydi)
+    for col_sql in [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS current_group INT DEFAULT 1;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_expires TIMESTAMP;",
+    ]:
+        cur.execute(col_sql)
     conn.commit()
     cur.close()
     conn.close()
@@ -72,15 +75,14 @@ def get_or_create_user(user_id: int, name: str, username: str, referrer_id: int 
         """, (user_id, name, username or '', referrer_id, str(date.today()), 1, 1))
 
         if referrer_id and referrer_id != user_id:
-            cur.execute("""
-                UPDATE users SET referral_count = referral_count + 1
-                WHERE user_id = %s
-            """, (referrer_id,))
+            cur.execute(
+                "UPDATE users SET referral_count = referral_count + 1 WHERE user_id = %s",
+                (referrer_id,)
+            )
             cur.execute(
                 "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s)",
                 (referrer_id, user_id)
             )
-
         conn.commit()
         cur.close()
         conn.close()
@@ -108,7 +110,7 @@ def update_streak(user_id: int):
     if not user:
         return
     today = date.today()
-    last = user.get("last_active")
+    last  = user.get("last_active")
     streak = user.get("streak", 0)
     if last:
         if isinstance(last, str):
@@ -118,7 +120,6 @@ def update_streak(user_id: int):
             streak += 1
         elif diff > 1:
             streak = 1
-        # diff == 0 bo'lsa o'zgarmaydi (bugun allaqachon kirgan)
     else:
         streak = 1
     conn = get_conn()
@@ -132,19 +133,14 @@ def update_streak(user_id: int):
     conn.close()
 
 def add_score(user_id: int, points: int):
-    """Faqat score qo'shadi, referral_earnings ga tegmaydi"""
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        "UPDATE users SET score = score + %s WHERE user_id = %s",
-        (points, user_id)
-    )
+    cur.execute("UPDATE users SET score = score + %s WHERE user_id = %s", (points, user_id))
     conn.commit()
     cur.close()
     conn.close()
 
 def add_referral_earnings(user_id: int, amount: int):
-    """Referral mukofotini qo'shish"""
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -166,20 +162,74 @@ def add_learned_word(user_id: int, word: str):
     cur.close()
     conn.close()
 
-def set_vip(user_id: int, is_vip_val: bool = True):
+# ─── VIP: 1 oylik muddatli obuna ───────────────────────────────────────────
+
+def set_vip(user_id: int, is_vip_val: bool = True, months: int = 1):
+    """
+    is_vip_val=True  → VIP yoqish (vip_expires = hozir + months oy)
+    is_vip_val=False → VIP o'chirish (muddati tugadi)
+    """
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        "UPDATE users SET is_vip = %s, vip_since = %s WHERE user_id = %s",
-        (is_vip_val, datetime.now() if is_vip_val else None, user_id)
-    )
+    if is_vip_val:
+        now     = datetime.now()
+        expires = now + timedelta(days=30 * months)
+        cur.execute(
+            "UPDATE users SET is_vip = TRUE, vip_since = %s, vip_expires = %s WHERE user_id = %s",
+            (now, expires, user_id)
+        )
+    else:
+        cur.execute(
+            "UPDATE users SET is_vip = FALSE, vip_expires = NULL WHERE user_id = %s",
+            (user_id,)
+        )
     conn.commit()
     cur.close()
     conn.close()
 
 def is_vip(user_id: int) -> bool:
+    """VIP aktiv va muddati o'tmagan bo'lsa True"""
     user = get_user(user_id)
-    return bool(user.get("is_vip")) if user else False
+    if not user or not user.get("is_vip"):
+        return False
+    expires = user.get("vip_expires")
+    if expires is None:
+        return True   # eski yozuvlar uchun — xavfsiz qaytarish
+    if isinstance(expires, str):
+        expires = datetime.fromisoformat(expires)
+    return datetime.now() < expires
+
+def get_expired_vip_users() -> list:
+    """Muddati o'tgan VIP foydalanuvchilar ro'yxati"""
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT user_id, name, vip_expires
+        FROM users
+        WHERE is_vip = TRUE AND vip_expires IS NOT NULL AND vip_expires < NOW()
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
+
+def get_expiring_soon_vip_users(hours: int = 24) -> list:
+    """Muddati yaqinlashgan VIP foydalanuvchilar (ogohlantirish uchun)"""
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT user_id, name, vip_expires
+        FROM users
+        WHERE is_vip = TRUE
+          AND vip_expires IS NOT NULL
+          AND vip_expires BETWEEN NOW() AND NOW() + INTERVAL '%s hours'
+    """, (hours,))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
+
+# ─── VIP requests ──────────────────────────────────────────────────────────
 
 def create_vip_request(user_id: int, full_name: str, amount: int, check_file_id: str):
     conn = get_conn()
@@ -209,6 +259,8 @@ def update_vip_request_status(request_id: int, status: str):
     cur.close()
     conn.close()
 
+# ─── Leaderboard & stats ───────────────────────────────────────────────────
+
 def get_top_scores(limit=10):
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -225,7 +277,8 @@ def get_top_referrals(limit=10):
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        "SELECT user_id, name, username, referral_count, referral_earnings FROM users ORDER BY referral_count DESC LIMIT %s",
+        "SELECT user_id, name, username, referral_count, referral_earnings "
+        "FROM users ORDER BY referral_count DESC LIMIT %s",
         (limit,)
     )
     rows = [dict(r) for r in cur.fetchall()]
