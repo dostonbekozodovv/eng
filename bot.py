@@ -561,7 +561,7 @@ async def referal_menu(message: types.Message):
         f"👤 Taklif etilganlar: <b>{ref_count} ta</b>\n\n"
         f"<b>Qoidalar:</b>\n"
         f"✅ Havolani do'stlarga yuboring\n"
-        f"✅ Har juma eng ko'p referal qilgan g'olib <b>10 000 so'm</b> yutadi!\n"
+        f"✅ Har juma eng ko'p referal qilgan g'olib <b>5 000 so'm</b> yutadi!\n"
         f"✅ Har taklif uchun +5 ball"
     )
 
@@ -861,7 +861,7 @@ async def weekly_bonus_task():
                         winner["user_id"],
                         f"🎉 <b>HAFTALIK G'OLIB!</b>\n\n"
                         f"Siz bu haftada eng ko'p do'st taklif qildingiz!\n"
-                        f"💰 <b>+10 000 so'm</b> bonus qo'shildi! 🏆"
+                        f"💰 <b>+5 000 so'm</b> bonus qo'shildi! 🏆"
                     )
                 except Exception:
                     pass
