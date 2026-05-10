@@ -1162,7 +1162,7 @@ async def grammar_answer(callback: types.CallbackQuery, state: FSMContext):
             f"📊 Natija: <b>{percent}%</b>\n"
             f"⭐️ +{correct_count * 8} ball qo'shildi!\n"
             f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"{'🔥 Zo\'r! Siz grammatikani bilasiz!' if percent>=80 else '💪 Tushuntirishni qayta o\'qing va urinib ko\'ring!'}",
+            f"{'''🔥 Zo'r! Siz grammatikani bilasiz!''' if percent >= 80 else '''💪 Tushuntirishni qayta o'qing va urinib ko'ring!'''}",
             reply_markup=kb
         )
     else:
