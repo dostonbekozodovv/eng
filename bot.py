@@ -1162,7 +1162,7 @@ async def grammar_answer(callback: types.CallbackQuery, state: FSMContext):
             f"📊 Natija: <b>{percent}%</b>\n"
             f"⭐️ +{correct_count * 8} ball qo'shildi!\n"
             f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"{'''🔥 Zo'r! Siz grammatikani bilasiz!''' if percent >= 80 else '''💪 Tushuntirishni qayta o'qing va urinib ko'ring!'''}",
+            f"{'🔥 Zo\'r! Siz grammatikani bilasiz!' if percent>=80 else '💪 Tushuntirishni qayta o\'qing va urinib ko\'ring!'}",
             reply_markup=kb
         )
     else:
@@ -1690,6 +1690,428 @@ async def weekly_bonus_task():
         except Exception as e:
             logger.error(f"Haftalik bonus xatosi: {e}")
             await asyncio.sleep(3600)
+
+
+# ══════════════════════════════════════════════════
+# GURUH REJIMI
+# ══════════════════════════════════════════════════
+
+def is_group(message: types.Message) -> bool:
+    return message.chat.type in ("group", "supergroup")
+
+# Guruhda bot qo'shilganda salomlashish
+@dp.my_chat_member()
+async def bot_added_to_group(event: types.ChatMemberUpdated):
+    """Bot guruhga qo'shilganda"""
+    if event.new_chat_member.status in ("member", "administrator"):
+        chat = event.chat
+        await bot.send_message(
+            chat.id,
+            "👋 <b>Salom! Men LexoBot — ingliz tili o'qituvchiman!</b>\n\n"
+            "📚 <b>Guruhda nima qila olaman:</b>\n"
+            "• /quiz — Tasodifiy so'z testi\n"
+            "• /quiz_beginner — Boshlang'ich daraja testi\n"
+            "• /quiz_intermediate — O'rta daraja testi\n"
+            "• /quiz_advanced — Yuqori daraja testi\n"
+            "• /grammar — Grammatika testi\n"
+            "• /word — Kundalik so'z\n"
+            "• /words — Barcha so'zlar ro'yxati\n"
+            "• /level — Daraja tanlash\n\n"
+            "🔥 Har kuni yangi so'z o'rganib bilimingizni oshiring!\n"
+            "👉 Shaxsiy o'rganish uchun: @" + (await bot.get_me()).username
+        )
+
+# /start guruhda — shaxsiy botga yo'naltirish
+@dp.message(CommandStart(), lambda m: is_group(m))
+async def group_start(message: types.Message):
+    bot_info = await bot.get_me()
+    await message.answer(
+        f"👋 Salom, <b>{message.from_user.first_name}</b>!\n\n"
+        f"📱 Shaxsiy o'rganish uchun botga o'ting:\n"
+        f"👉 @{bot_info.username}\n\n"
+        f"📚 Guruhda test uchun: /quiz"
+    )
+
+# /level guruhda — daraja tanlash
+@dp.message(Command("level"), lambda m: is_group(m))
+async def group_level_cmd(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Boshlang'ich",  callback_data="glevel_beginner")],
+        [InlineKeyboardButton(text="🟡 O'rta daraja",  callback_data="glevel_intermediate")],
+        [InlineKeyboardButton(text="🔴 Yuqori daraja", callback_data="glevel_advanced")],
+    ])
+    await message.answer(
+        "⚙️ <b>DARAJA TANLASH</b>\n\n"
+        "Qaysi daraja so'zlaridan test ishlashni xohlaysiz?",
+        reply_markup=kb
+    )
+
+@dp.callback_query(F.data.startswith("glevel_"))
+async def group_level_select(callback: types.CallbackQuery):
+    level_map = {
+        "beginner":     "🟢 Boshlang'ich",
+        "intermediate": "🟡 O'rta daraja",
+        "advanced":     "🔴 Yuqori daraja",
+    }
+    level = callback.data.split("_", 1)[1]
+    # Ushbu chat uchun darajani xotirada saqlaymiz (state orqali)
+    await callback.answer(f"✅ {level_map[level]} tanlandi!")
+    await _send_group_quiz_msg(
+        chat_id=callback.message.chat.id,
+        level=level,
+        reply_to=callback.message.message_id
+    )
+
+# /quiz — tasodifiy daraja testi
+@dp.message(Command("quiz"), lambda m: is_group(m))
+async def group_quiz_cmd(message: types.Message):
+    await _send_group_quiz_msg(
+        chat_id=message.chat.id,
+        level=None,   # None = barcha darajalardan aralash
+        reply_to=message.message_id
+    )
+
+# /quiz_beginner
+@dp.message(Command("quiz_beginner"), lambda m: is_group(m))
+async def group_quiz_beg(message: types.Message):
+    await _send_group_quiz_msg(message.chat.id, "beginner", message.message_id)
+
+# /quiz_intermediate
+@dp.message(Command("quiz_intermediate"), lambda m: is_group(m))
+async def group_quiz_int(message: types.Message):
+    await _send_group_quiz_msg(message.chat.id, "intermediate", message.message_id)
+
+# /quiz_advanced
+@dp.message(Command("quiz_advanced"), lambda m: is_group(m))
+async def group_quiz_adv(message: types.Message):
+    await _send_group_quiz_msg(message.chat.id, "advanced", message.message_id)
+
+async def _send_group_quiz_msg(chat_id: int, level: str | None, reply_to: int = None):
+    """Guruhga test savoli yuborish"""
+    level_names = {
+        "beginner":     "🟢 Boshlang'ich",
+        "intermediate": "🟡 O'rta",
+        "advanced":     "🔴 Yuqori",
+    }
+    if level and level in words:
+        word_pool = words[level]
+        level_label = level_names[level]
+    else:
+        # Barcha darajalardan aralash
+        word_pool = []
+        for lvl in ["beginner", "intermediate", "advanced"]:
+            word_pool += words.get(lvl, [])
+        level_label = "🌍 Aralash"
+
+    if len(word_pool) < 4:
+        await bot.send_message(chat_id, "⚠️ So'zlar yetarli emas!")
+        return
+
+    correct      = random.choice(word_pool)
+    wrong_pool   = [w for w in word_pool if w["word"] != correct["word"]]
+    wrong_sample = random.sample(wrong_pool, 3)
+    options      = [correct] + wrong_sample
+    random.shuffle(options)
+
+    # callback_data: gcqa_{correct_word}_{option_word}
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=opt["translation"],
+            callback_data=f"gcqa_{correct['word']}_{opt['word']}"
+        )]
+        for opt in options
+    ])
+
+    txt = (
+        f"🧠 <b>GURUH TESTI</b>  |  {level_label}\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🇬🇧 <b>{correct['word'].upper()}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"❓ Tarjimasini toping:"
+    )
+
+    if reply_to:
+        await bot.send_message(chat_id, txt, reply_markup=kb,
+                               reply_to_message_id=reply_to)
+    else:
+        await bot.send_message(chat_id, txt, reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("gcqa_"))
+async def group_quiz_answer_cb(callback: types.CallbackQuery):
+    """Guruh testiga javob"""
+    parts   = callback.data.split("_")
+    correct = parts[1]
+    chosen  = parts[2]
+    user    = callback.from_user
+    is_correct = (chosen == correct)
+
+    # To'g'ri/noto'g'ri ovoz berish
+    if is_correct:
+        add_score(user.id, 5)
+        await callback.answer(f"✅ To'g'ri! +5 ball! 🎉", show_alert=False)
+        result_line = (
+            f"✅ <b>{user.first_name}</b> to'g'ri javob berdi!\n"
+            f"🇬🇧 <b>{correct}</b> = 🇺🇿 tarjimasi\n"
+            f"⭐️ +5 ball qo'shildi!"
+        )
+    else:
+        await callback.answer(f"❌ Noto'g'ri! To'g'risi: {correct}", show_alert=True)
+        result_line = (
+            f"❌ <b>{user.first_name}</b> noto'g'ri javob berdi.\n"
+            f"✅ To'g'ri javob: <b>{correct}</b>"
+        )
+
+    # Javob topilganda — inline tugmalarni olib, natijani ko'rsat
+    next_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="▶️ Keyingi savol", callback_data=f"gcqa_next_{callback.message.chat.id}")]
+    ])
+    try:
+        old_text = callback.message.text or ""
+        await callback.message.edit_text(
+            old_text + f"\n\n{result_line}",
+            reply_markup=next_kb
+        )
+    except Exception:
+        pass
+
+@dp.callback_query(F.data.startswith("gcqa_next_"))
+async def group_quiz_next(callback: types.CallbackQuery):
+    """Keyingi savol — aralash daraja"""
+    chat_id = int(callback.data.split("_")[2])
+    await callback.answer()
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await _send_group_quiz_msg(chat_id=chat_id, level=None, reply_to=None)
+
+# /word — kundalik so'z
+@dp.message(Command("word"), lambda m: is_group(m))
+async def group_daily_word(message: types.Message):
+    # Barcha so'zlardan tasodifiy 1 ta
+    all_pool = []
+    for lvl in ["beginner", "intermediate", "advanced"]:
+        all_pool += words.get(lvl, [])
+    if not all_pool:
+        await message.answer("⚠️ So'zlar topilmadi!")
+        return
+
+    w = random.choice(all_pool)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🧠 Shu so'zni test qil", callback_data=f"gcqa_{w['word']}_{w['word']}_single")]
+    ])
+    await message.answer(
+        f"📚 <b>KUNDALIK SO'Z</b>\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🇬🇧  <b>{w['word'].upper()}</b>\n"
+        f"🇺🇿  <b>{w['translation']}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"💬 <i>{w['example']}</i>\n\n"
+        f"💡 Esda saqlang va do\'stlaringizga o\'rgating! 🚀"
+    )
+
+# /words — guruh darajasi bo'yicha so'zlar
+@dp.message(Command("words"), lambda m: is_group(m))
+async def group_words_list(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Boshlang'ich so'zlar",  callback_data="gwords_beginner")],
+        [InlineKeyboardButton(text="🟡 O'rta daraja so'zlari", callback_data="gwords_intermediate")],
+        [InlineKeyboardButton(text="🔴 Yuqori daraja so'zlari",callback_data="gwords_advanced")],
+    ])
+    await message.answer(
+        "📚 <b>SO'ZLAR RO'YXATI</b>\n\nQaysi daraja so'zlarini ko'rmoqchisiz?",
+        reply_markup=kb
+    )
+
+@dp.callback_query(F.data.startswith("gwords_"))
+async def group_words_show(callback: types.CallbackQuery):
+    level = callback.data.split("_", 1)[1]
+    level_names = {
+        "beginner":     "🟢 Boshlang'ich",
+        "intermediate": "🟡 O'rta daraja",
+        "advanced":     "🔴 Yuqori daraja",
+    }
+    word_list = words.get(level, [])
+    if not word_list:
+        await callback.answer("So'zlar topilmadi!", show_alert=True)
+        return
+
+    # Birinchi 20 ta (guruh 1)
+    shown = word_list[:20]
+    text  = f"📚 <b>{level_names[level]} — 1-guruh</b>\n\n"
+    for i, w in enumerate(shown, 1):
+        text += f"{i}. 🇬🇧 <b>{w['word']}</b> — 🇺🇿 {w['translation']}\n"
+
+    total_groups = (len(word_list) + 19) // 20
+    nav_buttons  = []
+    if total_groups > 1:
+        nav_buttons.append(
+            InlineKeyboardButton(text="➡️ 2-guruh", callback_data=f"gwords_page_{level}_2")
+        )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        nav_buttons,
+        [InlineKeyboardButton(text=f"🧠 {level_names[level]} testi", callback_data=f"glevel_{level}")]
+    ] if nav_buttons else [
+        [InlineKeyboardButton(text=f"🧠 {level_names[level]} testi", callback_data=f"glevel_{level}")]
+    ])
+    await callback.message.edit_text(text, reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("gwords_page_"))
+async def group_words_page(callback: types.CallbackQuery):
+    parts  = callback.data.split("_")
+    level  = parts[2]
+    page   = int(parts[3])
+    level_names = {
+        "beginner":     "🟢 Boshlang'ich",
+        "intermediate": "🟡 O'rta daraja",
+        "advanced":     "🔴 Yuqori daraja",
+    }
+    word_list    = words.get(level, [])
+    total_groups = (len(word_list) + 19) // 20
+    start_idx    = (page - 1) * 20
+    shown        = word_list[start_idx:start_idx + 20]
+
+    text = f"📚 <b>{level_names[level]} — {page}-guruh</b>\n\n"
+    for i, w in enumerate(shown, 1):
+        text += f"{i}. 🇬🇧 <b>{w['word']}</b> — 🇺🇿 {w['translation']}\n"
+
+    nav = []
+    if page > 1:
+        nav.append(InlineKeyboardButton(text=f"◀️ {page-1}-guruh", callback_data=f"gwords_page_{level}_{page-1}"))
+    if page < total_groups:
+        nav.append(InlineKeyboardButton(text=f"▶️ {page+1}-guruh", callback_data=f"gwords_page_{level}_{page+1}"))
+
+    rows = [nav] if nav else []
+    rows.append([InlineKeyboardButton(text=f"🧠 Test", callback_data=f"glevel_{level}")])
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+# /grammar guruhda
+@dp.message(Command("grammar"), lambda m: is_group(m))
+async def group_grammar_cmd(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"{t['emoji']} {t['name']}",
+            callback_data=f"ggram_{t['id']}"
+        )]
+        for t in GRAMMAR_TOPICS
+    ])
+    await message.answer(
+        "📖 <b>GRAMMATIKA TESTLARI</b>\n\nMavzu tanlang:",
+        reply_markup=kb
+    )
+
+@dp.callback_query(F.data.startswith("ggram_"))
+async def group_grammar_quiz(callback: types.CallbackQuery):
+    topic_id = callback.data.split("_", 1)[1]
+    topic    = next((t for t in GRAMMAR_TOPICS if t["id"] == topic_id), None)
+    if not topic:
+        await callback.answer("Topilmadi!", show_alert=True)
+        return
+    # Tushuntirish + test tugmasi
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"🧠 {topic['name']} testini boshlash",
+            callback_data=f"ggramq_{topic_id}_0"
+        )]
+    ])
+    await callback.message.edit_text(topic["explanation"], reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("ggramq_"))
+async def group_grammar_question(callback: types.CallbackQuery):
+    parts    = callback.data.split("_")
+    topic_id = parts[1]
+    q_index  = int(parts[2])
+    topic    = next((t for t in GRAMMAR_TOPICS if t["id"] == topic_id), None)
+    if not topic:
+        return
+    questions = topic["questions"]
+    if q_index >= len(questions):
+        await callback.message.edit_text(
+            f"✅ <b>{topic['name']} testi tugadi!</b>\n\nBoshqa mavzu sinab ko'ring:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📖 Boshqa mavzu", callback_data="ggramback")]
+            ])
+        )
+        return
+
+    q       = questions[q_index]
+    options = q["options"].copy()
+    random.shuffle(options)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=opt,
+            callback_data=f"ggramans_{topic_id}_{q_index}_{opt}_{q['answer']}"
+        )]
+        for opt in options
+    ])
+    progress = f"{q_index + 1}/{len(questions)}"
+    await callback.message.edit_text(
+        f"📖 <b>{topic['name']}</b>  |  {progress}\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"❓ <b>{q['q']}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"👇 To'g'ri javobni tanlang:",
+        reply_markup=kb
+    )
+
+@dp.callback_query(F.data.startswith("ggramans_"))
+async def group_grammar_answer(callback: types.CallbackQuery):
+    parts    = callback.data.split("_")
+    topic_id = parts[1]
+    q_index  = int(parts[2])
+    chosen   = parts[3]
+    correct  = parts[4]
+    user     = callback.from_user
+    topic    = next((t for t in GRAMMAR_TOPICS if t["id"] == topic_id), None)
+    if not topic:
+        return
+
+    is_correct  = (chosen == correct)
+    explanation = topic["questions"][q_index].get("explanation", "")
+
+    if is_correct:
+        add_score(user.id, 8)
+        await callback.answer(f"✅ To'g'ri! +8 ball! 💡 {explanation}")
+        result = f"✅ <b>{user.first_name}</b> to'g'ri javob berdi! (+8 ball)"
+    else:
+        await callback.answer(f"❌ Noto'g'ri! To'g'risi: {correct}\n💡 {explanation}", show_alert=True)
+        result = f"❌ <b>{user.first_name}</b> noto'g'ri. ✅ To'g'ri: <b>{correct}</b>"
+
+    next_index = q_index + 1
+    if next_index < len(topic["questions"]):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="➡️ Keyingi savol",
+                callback_data=f"ggramq_{topic_id}_{next_index}"
+            )]
+        ])
+    else:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🏁 Natija", callback_data=f"ggramq_{topic_id}_{next_index}")]
+        ])
+
+    old_text = callback.message.text or ""
+    try:
+        await callback.message.edit_text(
+            old_text + f"\n\n{result}",
+            reply_markup=kb
+        )
+    except Exception:
+        pass
+
+@dp.callback_query(F.data == "ggramback")
+async def group_grammar_back(callback: types.CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"{t['emoji']} {t['name']}",
+            callback_data=f"ggram_{t['id']}"
+        )]
+        for t in GRAMMAR_TOPICS
+    ])
+    await callback.message.edit_text(
+        "📖 <b>GRAMMATIKA TESTLARI</b>\n\nMavzu tanlang:",
+        reply_markup=kb
+    )
+
 
 # ══════════════════════════════════════════════════
 # MAIN
