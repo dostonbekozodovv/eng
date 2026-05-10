@@ -1162,7 +1162,11 @@ async def grammar_answer(callback: types.CallbackQuery, state: FSMContext):
             f"📊 Natija: <b>{percent}%</b>\n"
             f"⭐️ +{correct_count * 8} ball qo'shildi!\n"
             f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"{'🔥 Zo\'r! Siz grammatikani bilasiz!' if percent>=80 else '💪 Tushuntirishni qayta o\'qing va urinib ko\'ring!'}",
+          # O'zgaruvchiga biriktirishda oddiy qo'shtirnoq ishlatiladi, shuning uchun ichida ' (bittalik tirnoq) bemalol ishlayveradi, \ shart emas:
+xabar = "🔥 Zo'r! Siz grammatikani bilasiz!" if percent >= 80 else "💪 Tushuntirishni qayta o'qing va urinib ko'ring!"
+
+# Keyin uni f-string ichida chaqirib qo'yasiz:
+            f"{xabar}"
             reply_markup=kb
         )
     else:
