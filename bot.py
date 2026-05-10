@@ -1067,84 +1067,54 @@ async def grammar_quiz_start(callback: types.CallbackQuery, state: FSMContext):
 
     questions = topic["questions"].copy()
     random.shuffle(questions)
-
-    await state.set_state(GrammarQuizState.answering)
-    await state.update_data(
-        topic_id=topic_id,
-        topic_name=topic["name"],
-        questions=questions,
-        q_index=0,
-        correct_count=0,
-        total=len(questions)
-    )
-    await _send_grammar_question(callback.message, state, edit=True)
-    await callback.answer()
-
-async def _send_grammar_question(target, state: FSMContext, edit: bool = False):
-    data          = await state.get_data()
-    questions     = data["questions"]
-    q_index       = data["q_index"]
-    correct_count = data["correct_count"]
-    total         = data["total"]
-    topic_name    = data["topic_name"]
-
-    q = questions[q_index]
-    options = q["options"].copy()
-    random.shuffle(options)
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=opt,
-            callback_data=f"gans_{opt}_{q['answer']}"
-        )]
-        for opt in options
-    ] + [[InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="back_menu")]])
-
-    progress = "🟩" * correct_count + "⬜" * (total - correct_count)
-    txt = (
-        f"📖 <b>GRAMMATIKA TESTI</b>\n"
-        f"📌 {topic_name}\n"
-        f"📊 {q_index + 1}/{total}  {progress}\n\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"❓ <b>{q['q']}</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"👇 To'g'ri javobni tanlang:"
-    )
-    if edit:
-        await target.edit_text(txt, reply_markup=kb)
-    else:
-        await target.answer(txt, reply_markup=kb)
-
-@dp.callback_query(F.data.startswith("gans_"), GrammarQuizState.answering)
-async def grammar_answer(callback: types.CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    parts   = callback.data.split("_", 3)
-    chosen  = parts[1]
-    correct = parts[2]
-
-    data          = await state.get_data()
-    questions     = data["questions"]
-    q_index       = data["q_index"]
-    correct_count = data["correct_count"]
-    total         = data["total"]
-    topic_id      = data["topic_id"]
-    topic_name    = data["topic_name"]
-
-    is_correct = (chosen == correct)
-    if is_correct:
+# 1165-qatordan boshlab (group_quiz_answer funksiyasi boshlanishi)
+    
+    data = await state.get_data()
+    q_num = data.get("q_num", 1)
+    total = data.get("total", 10)
+    correct_count = data.get("correct_count", 0)
+    group_num = data.get("group_num", 1)
+    
+    # Callback ma'lumotlarini ajratish
+    _, chosen_word, correct_word = callback.data.split("_")
+    
+    if chosen_word == correct_word:
         correct_count += 1
-        add_score(user_id, 8)
-        explanation = questions[q_index].get("explanation", "")
-        await callback.answer(f"✅ To'g'ri! +8 ball 🎉\n{explanation}")
+        await callback.answer("✅ To'g'ri!", show_alert=False)
     else:
-        explanation = questions[q_index].get("explanation", "")
-        await callback.answer(
-            f"❌ Noto'g'ri!\n✅ To'g'ri: {correct}\n💡 {explanation}",
-            show_alert=True
+        await callback.answer(f"❌ Xato! To'g'ri javob: {correct_word}", show_alert=True)
+        
+    if q_num < total:
+        await state.update_data(q_num=q_num + 1, correct_count=correct_count)
+        await _send_group_quiz(callback.message, callback.from_user.id, state, edit=True)
+    else:
+        # Test tugadi - Natijani hisoblash
+        percent = (correct_count / total) * 100
+        
+        # Xatoni keltirib chiqargan matn qismi (Tuzatildi ✅)
+        status_msg = "🔥 Zo'r! Siz grammatikani bilasiz!" if percent >= 80 else "💪 Tushuntirishni qayta o'qing va urinib ko'ring!"
+        
+        result_txt = (
+            f"🏁 <b>Test yakunlandi!</b>\n"
+            f"📦 Guruh: {group_num}\n"
+            f"✅ To'g'ri javoblar: {correct_count}/{total}\n"
+            f"📊 Natija: {percent}%\n\n"
+            f"{status_msg}"
         )
-
-    next_index = q_index + 1
-    if next_index >= total:
+        
+        kb_buttons = []
+        if percent >= 70:
+            # Keyingi guruhni ochish
+            new_group = group_num + 1
+            update_user_group(callback.from_user.id, new_group)
+            kb_buttons.append([InlineKeyboardButton(text="🔓 Keyingi guruhni ochish", callback_data="next_word")])
+        else:
+            kb_buttons.append([InlineKeyboardButton(text="🔄 Qayta topshirish", callback_data=f"group_quiz_{group_num}")])
+            
+        kb_buttons.append([InlineKeyboardButton(text="🏠 Bosh menyu", callback_data="back_menu")])
+        kb = InlineKeyboardMarkup(inline_keyboard=kb_buttons)
+        
+        await callback.message.edit_text(result_txt, reply_markup=kb)
         await state.clear()
         percent = int((correct_count / total) * 100)
         emoji   = "🏆" if percent == 100 else ("🥇" if percent >= 80 else ("👍" if percent >= 60 else "📚"))
