@@ -547,12 +547,14 @@ async def cmd_start(message: types.Message, command: CommandObject = None):
         )
         return
 
-    if ref_id:
+    # Obuna bor — referal xabarini yuborish (agar yangi foydalanuvchi bo'lsa)
+    if ref_id and user.get("is_new"):
         try:
             await bot.send_message(
                 ref_id,
-                f"🎉 Siz taklif qilgan <b>{name}</b> botga qo'shildi!\n"
-                f"👥 Referal hisobingiz yangilandi!"
+                f"🎉 <b>Yangi referal!</b>\n\n"
+                f"✅ Siz taklif qilgan <b>{name}</b> ro'yxatdan o'tdi!\n"
+                f"⭐️ <b>+50 ball</b> qo'shildi!"
             )
         except Exception:
             pass
@@ -578,14 +580,27 @@ async def check_sub_cb(callback: types.CallbackQuery):
     if await check_subscription(user_id):
         await callback.message.delete()
         user = get_user(user_id)
+        # Referal xabarini hozir yuborish (obuna tasdiqlandi)
+        ref_id = user.get("referred_by") if user else None
+        if ref_id:
+            try:
+                name = callback.from_user.first_name or "Do'st"
+                await bot.send_message(
+                    int(ref_id),
+                    f"🎉 <b>Yangi referal!</b>\n\n"
+                    f"✅ Siz taklif qilgan <b>{name}</b> ro'yxatdan o'tdi!\n"
+                    f"⭐️ <b>+50 ball</b> qo'shildi!"
+                )
+            except Exception:
+                pass
         if not user or not user.get("level"):
             await callback.message.answer(
-                "✅ Rahmat! Darajangizni tanlang:",
+                "✅ <b>Obuna tasdiqlandi!</b>\n\nDarajangizni tanlang:",
                 reply_markup=level_kb()
             )
         else:
             await callback.message.answer(
-                "✅ Zo'r! Xush kelibsiz! 🎉",
+                "✅ <b>Xush kelibsiz!</b> 🎉",
                 reply_markup=main_kb(user_id)
             )
     else:
@@ -830,14 +845,15 @@ async def cmd_stopquiz(message: types.Message):
 
 @dp.callback_query(F.data.startswith("poll_group_"))
 async def poll_group_selected(callback: types.CallbackQuery, state: FSMContext):
-    user_id   = callback.from_user.id
-    chat_id   = callback.message.chat.id
-    user      = get_user(user_id)
+    user_id    = callback.from_user.id
+    chat_id    = callback.message.chat.id
+    in_group   = is_group(callback.message)
+    user       = get_user(user_id)
     if not user:
         user = get_or_create_user(user_id, callback.from_user.first_name or "Do'st", callback.from_user.username or "")
-    group_num = int(callback.data.split("_")[2])
-    level     = user.get("level", "beginner")
-    all_words = words.get(level, [])
+    group_num  = int(callback.data.split("_")[2])
+    level      = user.get("level", "beginner")
+    all_words  = words.get(level, [])
 
     start_idx   = (group_num - 1) * 20
     group_words = all_words[start_idx:start_idx + 20]
@@ -848,7 +864,6 @@ async def poll_group_selected(callback: types.CallbackQuery, state: FSMContext):
 
     total = min(20, len(group_words))
 
-    # Ready bosqichi — avval tayyor bo'lganlarni yig'ish
     GROUP_QUIZ_STATE[chat_id] = {
         "group_num":         group_num,
         "level":             level,
@@ -859,30 +874,43 @@ async def poll_group_selected(callback: types.CallbackQuery, state: FSMContext):
         "scores":            {},
         "poll_answers":      {},
         "answered_polls":    {},
-        "active":            False,   # Hali boshlanmagan
+        "active":            False,
         "unanswered_streak": 0,
         "last_poll_id":      None,
         "starter_id":        user_id,
         "starter_name":      callback.from_user.first_name or "Obunachi",
         "ready_users":       {str(user_id): callback.from_user.first_name or "Obunachi"},
-        "phase":             "lobby",  # lobby | running
+        "phase":             "lobby",
     }
 
+    # Shaxsiy chatda — Ready kerak emas, to'g'ridan boshlash
+    if not in_group:
+        GROUP_QUIZ_STATE[chat_id]["phase"]  = "running"
+        GROUP_QUIZ_STATE[chat_id]["active"] = True
+        await callback.message.edit_text(
+            f"🎯 <b>{group_num}-guruh viktorinasi boshlanmoqda!</b>\n\n"
+            f"📊 Jami savollar: <b>{total}</b>\n"
+            f"⏱ Har savol uchun <b>20 soniya</b>",
+            reply_markup=None
+        )
+        await callback.answer()
+        await _send_group_poll(chat_id)
+        return
+
+    # Guruhda — Ready tizimi
     ready_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Tayyor!", callback_data=f"quiz_ready_{chat_id}")]
     ])
-
     await callback.message.edit_text(
         f"🎯 <b>{group_num}-guruh viktorinasi</b>\n\n"
-        f"👥 Ishtirokchilar: <b>1/2+</b>\n"
-        f"✅ {callback.from_user.first_name} tayyor!\n\n"
-        f"⏳ Boshlanishi uchun kamida <b>2 kishi</b> tayyor bo'lishi kerak\n"
+        f"👥 Tayyor bo'lganlar: <b>1 kishi</b>\n"
+        f"✅ {callback.from_user.first_name}\n\n"
+        f"⏳ Kamida <b>2 kishi</b> tayyor bo'lishi kerak\n"
         f"⏱ <b>30 soniya</b> kutiladi\n\n"
         f"👇 Tayyor bo'lsangiz bosing:",
         reply_markup=ready_kb
     )
     await callback.answer()
-    # 30 soniyadan keyin lobby'ni tekshirish
     asyncio.create_task(_lobby_timeout(chat_id, callback.message.message_id))
 
 async def _lobby_timeout(chat_id: int, message_id: int):
@@ -1946,6 +1974,9 @@ async def show_streak(message: types.Message):
 
     bar = "🔥" * min(streak, 10) + "⬜" * max(0, 10 - streak)
 
+    prize_pct  = min(100, int(score / 10_000 * 100))
+    prize_bar  = "🟨" * (prize_pct // 10) + "⬜" * (10 - prize_pct // 10)
+    prize_left = max(0, 10_000 - score)
     prize_line = "✅ 10 000 ball — sovrin yutdingiz!" if score >= 10_000 else f"⭐️ Yana {prize_left:,} ball — {PRIZE_SCORE_AMOUNT:,} so'm sovrin!"
 
     await message.answer(
@@ -2071,6 +2102,24 @@ async def guide_menu(message: types.Message):
         reply_markup=kb
     )
 
+@dp.callback_query(F.data == "guide_back")
+async def guide_back_cb(callback: types.CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📚 So'z o'rgan",    callback_data="guide_learn")],
+        [InlineKeyboardButton(text="🧠 Test",           callback_data="guide_test")],
+        [InlineKeyboardButton(text="📖 Grammatika",     callback_data="guide_grammar")],
+        [InlineKeyboardButton(text="🔥 Streak",         callback_data="guide_streak")],
+        [InlineKeyboardButton(text="🏆 Reyting & Ball", callback_data="guide_rating")],
+        [InlineKeyboardButton(text="👥 Referal",        callback_data="guide_referal")],
+        [InlineKeyboardButton(text="💎 VIP",            callback_data="guide_vip")],
+        [InlineKeyboardButton(text="🏠 Bosh menyu",     callback_data="back_menu")],
+    ])
+    await callback.message.edit_text(
+        "📋 <b>QO'LLANMA</b>\n\nQaysi bo'lim haqida bilmoqchisiz?",
+        reply_markup=kb
+    )
+    await callback.answer()
+
 @dp.callback_query(F.data.startswith("guide_"))
 async def guide_section(callback: types.CallbackQuery):
     section = callback.data.split("_", 1)[1]
@@ -2169,23 +2218,6 @@ async def guide_section(callback: types.CallbackQuery):
         await callback.message.answer(txt, reply_markup=kb)
     await callback.answer()
 
-@dp.callback_query(F.data == "guide_back")
-async def guide_back_cb(callback: types.CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📚 So'z o'rgan",    callback_data="guide_learn")],
-        [InlineKeyboardButton(text="🧠 Test",           callback_data="guide_test")],
-        [InlineKeyboardButton(text="📖 Grammatika",     callback_data="guide_grammar")],
-        [InlineKeyboardButton(text="🔥 Streak",         callback_data="guide_streak")],
-        [InlineKeyboardButton(text="🏆 Reyting & Ball", callback_data="guide_rating")],
-        [InlineKeyboardButton(text="👥 Referal",        callback_data="guide_referal")],
-        [InlineKeyboardButton(text="💎 VIP",            callback_data="guide_vip")],
-        [InlineKeyboardButton(text="🏠 Bosh menyu",     callback_data="back_menu")],
-    ])
-    await callback.message.edit_text(
-        "📋 <b>QO'LLANMA</b>\n\nQaysi bo'lim haqida bilmoqchisiz?",
-        reply_markup=kb
-    )
-    await callback.answer()
 
 # ══════════════════════════════════════════════════
 # TAKLIF VA FIKR
