@@ -26,6 +26,7 @@ def init_db():
             referral_earnings BIGINT DEFAULT 0,
             learned_words TEXT[] DEFAULT '{}',
             current_group INT DEFAULT 1,
+            referral_notified BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT NOW()
         );
         CREATE TABLE IF NOT EXISTS referrals (
@@ -44,10 +45,10 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         );
     """)
-    # Mavjud jadvalga yangi ustunlarni qo'shish (xato bermaydi)
     for col_sql in [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS current_group INT DEFAULT 1;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_expires TIMESTAMP;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_notified BOOLEAN DEFAULT FALSE;",
     ]:
         cur.execute(col_sql)
     conn.commit()
@@ -109,8 +110,8 @@ def update_streak(user_id: int):
     user = get_user(user_id)
     if not user:
         return
-    today = date.today()
-    last  = user.get("last_active")
+    today  = date.today()
+    last   = user.get("last_active")
     streak = user.get("streak", 0)
     if last:
         if isinstance(last, str):
@@ -162,13 +163,7 @@ def add_learned_word(user_id: int, word: str):
     cur.close()
     conn.close()
 
-# ─── VIP: 1 oylik muddatli obuna ───────────────────────────────────────────
-
 def set_vip(user_id: int, is_vip_val: bool = True, months: int = 1):
-    """
-    is_vip_val=True  → VIP yoqish (vip_expires = hozir + months oy)
-    is_vip_val=False → VIP o'chirish (muddati tugadi)
-    """
     conn = get_conn()
     cur = conn.cursor()
     if is_vip_val:
@@ -188,19 +183,17 @@ def set_vip(user_id: int, is_vip_val: bool = True, months: int = 1):
     conn.close()
 
 def is_vip(user_id: int) -> bool:
-    """VIP aktiv va muddati o'tmagan bo'lsa True"""
     user = get_user(user_id)
     if not user or not user.get("is_vip"):
         return False
     expires = user.get("vip_expires")
     if expires is None:
-        return True   # eski yozuvlar uchun — xavfsiz qaytarish
+        return True
     if isinstance(expires, str):
         expires = datetime.fromisoformat(expires)
     return datetime.now() < expires
 
 def get_expired_vip_users() -> list:
-    """Muddati o'tgan VIP foydalanuvchilar ro'yxati"""
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
@@ -214,7 +207,6 @@ def get_expired_vip_users() -> list:
     return rows
 
 def get_expiring_soon_vip_users(hours: int = 24) -> list:
-    """Muddati yaqinlashgan VIP foydalanuvchilar (ogohlantirish uchun)"""
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
@@ -228,8 +220,6 @@ def get_expiring_soon_vip_users(hours: int = 24) -> list:
     cur.close()
     conn.close()
     return rows
-
-# ─── VIP requests ──────────────────────────────────────────────────────────
 
 def create_vip_request(user_id: int, full_name: str, amount: int, check_file_id: str):
     conn = get_conn()
@@ -258,8 +248,6 @@ def update_vip_request_status(request_id: int, status: str):
     conn.commit()
     cur.close()
     conn.close()
-
-# ─── Leaderboard & stats ───────────────────────────────────────────────────
 
 def get_top_scores(limit=10):
     conn = get_conn()
