@@ -22,6 +22,7 @@ from config import (
     CHANNEL_ID, CHANNEL_USERNAME, MIN_REFERRALS_FOR_BONUS
 )
 from db import (
+    get_conn,
     get_or_create_user, get_user, update_streak, add_score, add_referral_earnings,
     add_learned_word, set_vip, is_vip, create_vip_request,
     get_stats, get_all_user_ids, get_top_scores, get_top_referrals,
@@ -95,6 +96,9 @@ class GroupPollState(StatesGroup):
 
 class FeedbackState(StatesGroup):
     waiting = State()
+
+class ResetOneRefState(StatesGroup):
+    waiting_id = State()
 
 class UserTestState(StatesGroup):
     waiting_question = State()
@@ -580,19 +584,34 @@ async def check_sub_cb(callback: types.CallbackQuery):
     if await check_subscription(user_id):
         await callback.message.delete()
         user = get_user(user_id)
-        # Referal xabarini hozir yuborish (obuna tasdiqlandi)
+
+        # Referal: faqat birinchi marta (referral_notified belgisi yo'q bo'lsa)
         ref_id = user.get("referred_by") if user else None
-        if ref_id:
+        if ref_id and not user.get("referral_notified"):
             try:
                 name = callback.from_user.first_name or "Do'st"
+                # Taklif qilganga +50 ball qo'shish
+                add_score(int(ref_id), 50)
+                # Xabar yuborish
                 await bot.send_message(
                     int(ref_id),
                     f"🎉 <b>Yangi referal!</b>\n\n"
                     f"✅ Siz taklif qilgan <b>{name}</b> ro'yxatdan o'tdi!\n"
                     f"⭐️ <b>+50 ball</b> qo'shildi!"
                 )
+                # Qayta xabar kelmаsin deb belgilash
+                conn = get_conn()
+                cur  = conn.cursor()
+                cur.execute(
+                    "UPDATE users SET referral_notified = TRUE WHERE user_id = %s",
+                    (user_id,)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
             except Exception:
                 pass
+
         if not user or not user.get("level"):
             await callback.message.answer(
                 "✅ <b>Obuna tasdiqlandi!</b>\n\nDarajangizni tanlang:",
@@ -2512,360 +2531,4 @@ async def vip_get_check(message: types.Message, state: FSMContext):
 
     await message.answer(
         "✅ <b>Arizangiz qabul qilindi!</b>\n\n"
-        "⏳ Adminlar <b>24 soat</b> ichida ko'rib chiqadilar.\n"
-        "📩 Natija haqida xabar beriladi."
-    )
-
-    username = f"@{message.from_user.username}" if message.from_user.username else "yo'q"
-    caption  = (
-        f"🆕 <b>VIP SO'ROV</b>\n\n"
-        f"👤 Ism: <b>{data['full_name']}</b>\n"
-        f"🆔 ID: <code>{user_id}</code>\n"
-        f"📱 Username: {username}\n"
-        f"💰 Summa: <b>{VIP_PRICE:,} so'm</b>"
-    )
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"vadm_ok_{user_id}")],
-        [InlineKeyboardButton(text="❌ Rad etish",  callback_data=f"vadm_no_{user_id}")],
-    ])
-    for admin_id in ADMIN_IDS:
-        try:
-            if message.photo:
-                await bot.send_photo(admin_id, photo=file_id, caption=caption, reply_markup=kb)
-            else:
-                await bot.send_document(admin_id, document=file_id, caption=caption, reply_markup=kb)
-        except Exception as e:
-            logger.error(f"Admin {admin_id} ga yuborib bo'lmadi: {e}")
-
-@dp.message(VipState.waiting_check)
-async def vip_check_wrong_type(message: types.Message):
-    await message.answer("⚠️ Iltimos, <b>rasm</b> yoki <b>fayl</b> yuboring.")
-
-# ══════════════════════════════════════════════════
-# ADMIN VIP TASDIQLASH
-# ══════════════════════════════════════════════════
-@dp.callback_query(F.data.startswith("vadm_ok_"))
-async def admin_vip_approve(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMIN_IDS:
-        await callback.answer("❌ Ruxsat yo'q!", show_alert=True)
-        return
-    target_id = int(callback.data.split("_")[2])
-    set_vip(target_id, True)
-    try:
-        await bot.send_message(
-            target_id,
-            "🎉 <b>TABRIKLAYMIZ!</b>\n\n"
-            "💎 VIP obunangiz tasdiqlandi!\n"
-            "📅 Muddat: <b>30 kun</b>\n\n"
-            "Barcha VIP imkoniyatlar faollashdi! 🚀",
-            reply_markup=main_kb(target_id)
-        )
-    except Exception as e:
-        logger.error(f"VIP user {target_id} ga xabar yuborib bo'lmadi: {e}")
-    new_caption = (callback.message.caption or "") + "\n\n✅ <b>TASDIQLANDI</b>"
-    await callback.message.edit_caption(caption=new_caption, reply_markup=None)
-    await callback.answer("✅ VIP tasdiqlandi!")
-
-@dp.callback_query(F.data.startswith("vadm_no_"))
-async def admin_vip_reject(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMIN_IDS:
-        await callback.answer("❌ Ruxsat yo'q!", show_alert=True)
-        return
-    target_id = int(callback.data.split("_")[2])
-    try:
-        await bot.send_message(
-            target_id,
-            "❌ <b>VIP so'rovingiz rad etildi.</b>\n\n"
-            "To'lov tasdiqlanmadi.\n"
-            "Muammo bo'lsa admin bilan bog'laning."
-        )
-    except Exception as e:
-        logger.error(f"Rad etish xabari {target_id} ga yuborib bo'lmadi: {e}")
-    new_caption = (callback.message.caption or "") + "\n\n❌ <b>RAD ETILDI</b>"
-    await callback.message.edit_caption(caption=new_caption, reply_markup=None)
-    await callback.answer("❌ Rad etildi")
-
-# ══════════════════════════════════════════════════
-# VIP PANEL
-# ══════════════════════════════════════════════════
-@dp.message(F.text == "💎 VIP Panel")
-async def vip_panel(message: types.Message):
-    user_id = message.from_user.id
-    user    = get_user(user_id)
-
-    if user_id in ADMIN_IDS:
-        stats = get_stats()
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📊 Statistika",       callback_data="adm_stats")],
-            [InlineKeyboardButton(text="📢 Xabar yuborish",   callback_data="adm_broadcast")],
-            [InlineKeyboardButton(text="⏳ Kutilayotgan VIP", callback_data="adm_pending")],
-        ])
-        await message.answer(
-            f"👨‍💼 <b>ADMIN PANEL</b>\n\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"👥 Jami: <b>{stats['total']}</b>\n"
-            f"💎 VIP: <b>{stats['vip']}</b>\n"
-            f"⏳ Kutilmoqda: <b>{stats['pending_vip']}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━",
-            reply_markup=kb
-        )
-        return
-
-    if not is_vip(user_id):
-        await message.answer(
-            "❌ Siz VIP emassiz.\n\n"
-            "💎 VIP sotib olish uchun tugmani bosing:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💎 VIP Sotib olish", callback_data="vip_renew")]
-            ])
-        )
-        return
-
-    vip_since   = user.get("vip_since")
-    vip_expires = user.get("vip_expires")
-    since_str   = vip_since.strftime("%d.%m.%Y") if vip_since else "—"
-
-    if vip_expires:
-        if isinstance(vip_expires, str):
-            vip_expires = datetime.fromisoformat(vip_expires)
-        expires_str = vip_expires.strftime("%d.%m.%Y")
-        delta     = vip_expires - datetime.now()
-        days_left = max(0, delta.days)
-        expire_line = (
-            f"⚠️ Tugaydi: <b>{expires_str}</b> ({days_left} kun qoldi!)"
-            if days_left <= 3
-            else f"📅 Tugaydi: <b>{expires_str}</b> ({days_left} kun)"
-        )
-    else:
-        expire_line = "📅 Muddat: —"
-
-    await message.answer(
-        f"💎 <b>VIP PANEL</b>\n\n"
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"✅ VIP: <b>Faol</b>\n"
-        f"📅 Boshlangan: <b>{since_str}</b>\n"
-        f"{expire_line}\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🔓 Testisiz guruh o'tish: <b>Faol</b>\n"
-        f"🚀 Barcha imkoniyatlar faol!"
-    )
-
-# ══════════════════════════════════════════════════
-# ADMIN KOMANDALAR
-# ══════════════════════════════════════════════════
-@dp.message(Command("admin"))
-async def admin_cmd(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("❌ Ruxsat yo'q")
-        return
-    stats = get_stats()
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Statistika",       callback_data="adm_stats")],
-        [InlineKeyboardButton(text="📢 Xabar yuborish",   callback_data="adm_broadcast")],
-        [InlineKeyboardButton(text="⏳ Kutilayotgan VIP", callback_data="adm_pending")],
-    ])
-    await message.answer(
-        f"👨‍💼 <b>ADMIN PANEL</b>\n\n"
-        f"👥 Jami: <b>{stats['total']}</b>\n"
-        f"💎 VIP: <b>{stats['vip']}</b>\n"
-        f"⏳ Kutilmoqda: <b>{stats['pending_vip']}</b>",
-        reply_markup=kb
-    )
-
-@dp.callback_query(F.data == "adm_stats")
-async def adm_stats_cb(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMIN_IDS:
-        return
-    stats = get_stats()
-    await callback.message.edit_text(
-        f"📊 <b>STATISTIKA</b>\n\n"
-        f"👥 Jami foydalanuvchi: <b>{stats['total']}</b>\n"
-        f"💎 VIP: <b>{stats['vip']}</b>\n"
-        f"⏳ Kutilayotgan VIP: <b>{stats['pending_vip']}</b>",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Yangilash", callback_data="adm_stats")]
-        ])
-    )
-
-@dp.callback_query(F.data == "adm_pending")
-async def adm_pending_cb(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMIN_IDS:
-        return
-    reqs = get_pending_vip_requests()
-    if not reqs:
-        await callback.answer("✅ Kutilayotgan so'rovlar yo'q", show_alert=True)
-        return
-    await callback.answer(f"⏳ {len(reqs)} ta so'rov kutmoqda", show_alert=True)
-
-@dp.callback_query(F.data == "adm_broadcast")
-async def adm_broadcast_cb(callback: types.CallbackQuery, state: FSMContext):
-    if callback.from_user.id not in ADMIN_IDS:
-        return
-    await state.set_state(BroadcastState.waiting)
-    await callback.message.answer(
-        "📢 <b>XABAR YUBORISH</b>\n\n"
-        "Barcha foydalanuvchilarga yuboriladigan xabarni yozing\n"
-        "<i>(matn, rasm, video — hammasi qabul qilinadi)</i>:"
-    )
-    await callback.answer()
-
-@dp.message(Command("broadcast"))
-async def broadcast_cmd(message: types.Message, state: FSMContext):
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("❌ Ruxsat yo'q")
-        return
-    await state.set_state(BroadcastState.waiting)
-    await message.answer("📢 Xabarni yozing:")
-
-@dp.message(BroadcastState.waiting)
-async def broadcast_send(message: types.Message, state: FSMContext):
-    if message.from_user.id not in ADMIN_IDS:
-        await state.clear()
-        return
-    await message.answer("⏳ Yuborilmoqda...")
-    user_ids = get_all_user_ids()
-    sent = fail = 0
-    for uid in user_ids:
-        try:
-            await bot.copy_message(uid, message.chat.id, message.message_id)
-            sent += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            fail += 1
-    await message.answer(
-        f"✅ <b>Xabar yuborildi!</b>\n\n"
-        f"📨 Muvaffaqiyatli: <b>{sent}</b>\n"
-        f"❌ Yuborilmadi: <b>{fail}</b>"
-    )
-    await state.clear()
-
-# ══════════════════════════════════════════════════
-# BACKGROUND TASKS
-# ══════════════════════════════════════════════════
-async def vip_expiry_task():
-    while True:
-        try:
-            await asyncio.sleep(3600)
-            expired = get_expired_vip_users()
-            for user in expired:
-                set_vip(user["user_id"], False)
-                try:
-                    await bot.send_message(
-                        user["user_id"],
-                        "⚠️ <b>VIP obunangiz tugadi!</b>\n\n"
-                        "1 oylik muddatingiz tugadi.\n"
-                        "Davom ettirish uchun qayta obuna bo'ling 👇",
-                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                            [InlineKeyboardButton(text="💎 Qayta obuna", callback_data="vip_renew")]
-                        ])
-                    )
-                except Exception:
-                    pass
-                for admin_id in ADMIN_IDS:
-                    try:
-                        await bot.send_message(
-                            admin_id,
-                            f"🔴 VIP tugadi: <b>{user['name']}</b> (ID: {user['user_id']})"
-                        )
-                    except Exception:
-                        pass
-
-            expiring = get_expiring_soon_vip_users(hours=24)
-            for user in expiring:
-                expires = user.get("vip_expires")
-                if expires:
-                    if isinstance(expires, str):
-                        expires = datetime.fromisoformat(expires)
-                    try:
-                        await bot.send_message(
-                            user["user_id"],
-                            f"⏰ <b>VIP tugayapti!</b>\n\n"
-                            f"Muddat: <b>{expires.strftime('%d.%m.%Y')}</b>\n"
-                            f"Uzilmaslik uchun hoziroq yangilang! 💎",
-                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                                [InlineKeyboardButton(text="💎 Qayta obuna", callback_data="vip_renew")]
-                            ])
-                        )
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.error(f"VIP expiry task xatosi: {e}")
-            await asyncio.sleep(300)
-
-async def weekly_bonus_task():
-    while True:
-        try:
-            now = datetime.now()
-            days_until_friday = (4 - now.weekday()) % 7
-            if days_until_friday == 0 and now.hour >= 18:
-                days_until_friday = 7
-            target       = now.replace(hour=18, minute=0, second=0, microsecond=0)
-            target      += timedelta(days=days_until_friday)
-            wait_seconds = (target - now).total_seconds()
-            await asyncio.sleep(max(60, wait_seconds))
-
-            top_list = get_top_referrals(1)
-            if top_list:
-                winner = top_list[0]
-                if winner.get("referral_count", 0) >= MIN_REFERRALS_FOR_BONUS:
-                    add_referral_earnings(winner["user_id"], 10000)
-                    try:
-                        await bot.send_message(
-                            winner["user_id"],
-                            f"🎉 <b>HAFTALIK G'OLIB!</b> 🏆\n\n"
-                            f"👥 Taklif: <b>{winner['referral_count']} ta</b>\n"
-                            f"💰 <b>+10 000 so'm</b> bonus!\n\n"
-                            f"Tabriklaymiz! 🎊"
-                        )
-                    except Exception:
-                        pass
-                else:
-                    for admin_id in ADMIN_IDS:
-                        try:
-                            await bot.send_message(
-                                admin_id,
-                                f"ℹ️ Haftalik bonus berilmadi.\n"
-                                f"Eng ko'p: <b>{winner.get('referral_count',0)} ta</b>\n"
-                                f"Kerak: kamida <b>{MIN_REFERRALS_FOR_BONUS} ta</b>"
-                            )
-                        except Exception:
-                            pass
-        except Exception as e:
-            logger.error(f"Haftalik bonus xatosi: {e}")
-            await asyncio.sleep(3600)
-
-# ══════════════════════════════════════════════════
-# MAIN
-# ══════════════════════════════════════════════════
-async def main():
-    from db import init_db
-    init_db()
-    logger.info("✅ LexoBot ishga tushdi!")
-
-    # ── Bot komandalarini ro'yxatga olish ──
-    private_commands = [
-        BotCommand(command="start",     description="🚀 Botni boshlash"),
-        BotCommand(command="menu",      description="🏠 Bosh menyu"),
-        BotCommand(command="quiz",      description="🎯 So'z viktorinasi (Poll)"),
-        BotCommand(command="test",      description="🧠 Test ishlash"),
-        BotCommand(command="learn",     description="📚 So'z o'rganish"),
-        BotCommand(command="grammar",   description="📖 Grammatika"),
-        BotCommand(command="streak",    description="🔥 Streak ko'rish"),
-        BotCommand(command="rating",    description="🏆 Reyting"),
-        BotCommand(command="referral",  description="👥 Referal tizimi"),
-        BotCommand(command="vip",       description="💎 VIP Panel"),
-    ]
-    group_commands = [
-        BotCommand(command="quiz",     description="🎯 Viktorina boshlash"),
-        BotCommand(command="stopquiz", description="⏹ Viktorinani to'xtatish"),
-    ]
-    await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
-    await bot.set_my_commands(group_commands,   scope=BotCommandScopeAllGroupChats())
-    logger.info("✅ Bot komandalari ro'yxatga olindi!")
-
-    asyncio.create_task(weekly_bonus_task())
-    asyncio.create_task(vip_expiry_task())
-    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        "⏳ Adminlar 
