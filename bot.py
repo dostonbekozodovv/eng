@@ -2315,9 +2315,9 @@ if len(text) > 4096:
     for i in range(0, len(text), 4096):
         chunk = text[i:i+4096]
         if i + 4096 < len(text):
-            await message.answer(chunk)
+            await message.answer('chunk')
         else:
-            await message.answer(chunk, reply_markup=kb)
+        await message.answer(chunk, reply_markup=kb)
 else:
     await message.answer(text, reply_markup=kb)
 
