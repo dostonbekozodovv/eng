@@ -2310,15 +2310,6 @@ async def prize_menu(message: types.Message):
         [InlineKeyboardButton(text="🧠 Test yechish",         callback_data="go_test")],
         [InlineKeyboardButton(text="🏠 Bosh menyu",          callback_data="back_menu")],
     ])
-if len(text) > 4096:
-    # Split into chunks
-    for i in range(0, len(text), 4096):
-        chunk = text[i:i+4096]
-        if i + 4096 < len(text):
-            await message.answer('chunk')
-        else:
-        await message.answer(chunk, reply_markup=kb)
-else:
     await message.answer(text, reply_markup=kb)
 
 @dp.callback_query(F.data == "go_test")
