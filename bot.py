@@ -2310,7 +2310,7 @@ async def prize_menu(message: types.Message):
         [InlineKeyboardButton(text="🧠 Test yechish",         callback_data="go_test")],
         [InlineKeyboardButton(text="🏠 Bosh menyu",          callback_data="back_menu")],
     ])
-    if len(text) > 4096:
+if len(text) > 4096:
     # Split into chunks
     for i in range(0, len(text), 4096):
         chunk = text[i:i+4096]
