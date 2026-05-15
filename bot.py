@@ -1690,7 +1690,7 @@ async def retake_learned_test_cb(callback: types.CallbackQuery, state: FSMContex
     level = user.get("level", "beginner")
     await state.set_state(QuizState.answering)
     await state.update_data(
-        q_num=1, total=min(10, len(learned)), correct_count=0,
+        q_num=1, total=min(50, len(learned)), correct_count=0,
         level=level,
         group_quiz=False,
         use_learned=True,
@@ -1786,7 +1786,7 @@ async def test_group_select_cb(callback: types.CallbackQuery, state: FSMContext)
         await callback.answer("⚠️ Bu guruhdan kamida 4 ta so'z o'rganing!", show_alert=True)
         return
 
-    total = min(10, len(test_pool))
+    total = min(50, len(test_pool))
     await state.set_state(QuizState.answering)
     await state.update_data(
         q_num=1, total=total, correct_count=0,
@@ -1811,7 +1811,7 @@ async def test_all_learned_cb(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer("⚠️ Kamida 4 ta so'z o'rganing!", show_alert=True)
         return
 
-    total = min(10, len(learned))
+    total = min(50, len(learned))
     await state.set_state(QuizState.answering)
     await state.update_data(
         q_num=1, total=total, correct_count=0,
@@ -2377,18 +2377,32 @@ async def show_rating(message: types.Message):
 @dp.callback_query(F.data == "rank_score")
 async def show_top_score(callback: types.CallbackQuery):
     top    = get_top_scores(10)
+    # Top-1 ball miqdori va 10 000 ga qolgan ball
+    top1_score = top[0].get("score", 0) if top else 0
+    left_for_win = max(0, 10_000 - top1_score)
     text   = "🏆 <b>TOP 10 — BALL REYTINGI</b>\n\n"
+    if top1_score >= 10_000:
+        text += f"🎉 <b>1-o'rin egasi 10 000 ballga yetdi — g'olib!</b>\n\n"
+    else:
+        text += f"🥇 Lider g'alaba uchun yana <b>{left_for_win:,} ball</b> yig'ishi kerak!\n\n"
     medals = ["🥇","🥈","🥉"]
     for i, u in enumerate(top, 1):
         vip   = " 💎" if u.get("is_vip") else ""
         medal = medals[i-1] if i <= 3 else f"{i}."
-        text += f"{medal} <b>{u['name']}</b>{vip} — {u['score']} ⭐️\n"
+        uid   = u.get("user_id")
+        uname = u.get("username")
+        name  = u.get("name") or f"User{uid}"
+        if uname:
+            user_link = f'<a href="https://t.me/{uname}">{name}</a>'
+        else:
+            user_link = f'<a href="tg://user?id={uid}">{name}</a>'
+        text += f"{medal} {user_link}{vip} — {u['score']} ⭐️\n"
     text += "\n<i>Har kuni o'rganib reyting oshiring! 🚀</i>"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👥 Referal reytingi", callback_data="rank_ref")],
         [InlineKeyboardButton(text="🏠 Bosh menyu",       callback_data="back_menu")],
     ])
-    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.message.edit_text(text, reply_markup=kb, disable_web_page_preview=True)
 
 @dp.callback_query(F.data == "rank_ref")
 async def show_top_ref(callback: types.CallbackQuery):
@@ -2397,13 +2411,20 @@ async def show_top_ref(callback: types.CallbackQuery):
     medals = ["🥇","🥈","🥉"]
     for i, u in enumerate(top, 1):
         medal = medals[i-1] if i <= 3 else f"{i}."
-        text += f"{medal} <b>{u['name']}</b> — {u['referral_count']} 👤\n"
+        uid   = u.get("user_id")
+        uname = u.get("username")
+        name  = u.get("name") or f"User{uid}"
+        if uname:
+            user_link = f'<a href="https://t.me/{uname}">{name}</a>'
+        else:
+            user_link = f'<a href="tg://user?id={uid}">{name}</a>'
+        text += f"{medal} {user_link} — {u['referral_count']} 👤\n"
     text += f"\n<i>Har juma 5+ taklif qilgan g'olib 10 000 so'm yutadi! 🏆</i>"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⭐ Ball reytingi", callback_data="rank_score")],
         [InlineKeyboardButton(text="🏠 Bosh menyu",    callback_data="back_menu")],
     ])
-    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.message.edit_text(text, reply_markup=kb, disable_web_page_preview=True)
 
 # ══════════════════════════════════════════════════
 # REFERAL
