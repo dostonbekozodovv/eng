@@ -531,7 +531,7 @@ def main_kb(user_id: int = None, chat=None):
         return ReplyKeyboardRemove()
     vip      = is_vip(user_id) if user_id else False
     is_admin = user_id in ADMIN_IDS if user_id else False
-    vip_btn  = KeyboardButton(text="💎 VIP Panel") if (is_admin or vip) else KeyboardButton(text=f"💎 VIP — {VIP_PRICE:,} so'm yoki {VIP_REF_COUNT} ta referal")
+    vip_btn  = KeyboardButton(text="💎 VIP Panel") if (is_admin or vip) else KeyboardButton(text="💎 VIP olish")
     buttons = [
         [KeyboardButton(text="⚔️ Do’st bilan bellashish")],
         [KeyboardButton(text="📚 So’z o‘rgan"),  KeyboardButton(text="🧠 Test")],
@@ -2449,7 +2449,7 @@ async def prize_menu(message: types.Message):
             "💡 <b>Ball yig'ish yo'llari:</b>\n"
             "  📚 So'z o'rganish → <b>+2 ball</b>\n"
             "  🧠 To'g'ri test → <b>+10 ball</b>\n"
-            "  👥 Do'st taklif (referal) → <b>+100 ball</b>\n"
+            "  👥 Do'st taklif (referal) → <b>+200 ball</b>\n"
             "  📋 So'rovnoma → <b>+500 ball</b>"
         )
         kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -2486,7 +2486,7 @@ async def prize_referral_cb(callback: types.CallbackQuery):
         f"Sizning referal havolangiz:\n"
         f"<code>{ref_link}</code>\n\n"
         f"👤 Taklif qilganlar: <b>{ref_count} ta</b>\n\n"
-        f"💡 Har bir do'st uchun <b>+100 ball</b> olasiz!"
+        f"💡 Har bir do'st uchun <b>+200 ball</b> olasiz!"
     )
     await callback.answer()
 
@@ -3010,7 +3010,7 @@ async def user_test_answer(callback: types.CallbackQuery, state: FSMContext):
 # ══════════════════════════════════════════════════
 # VIP TIZIMI
 # ══════════════════════════════════════════════════
-@dp.message(F.text == f"💎 VIP — {VIP_PRICE:,} so'm yoki {VIP_REF_COUNT} ta referal")
+@dp.message(F.text == "💎 VIP olish")
 async def vip_buy(message: types.Message):
     user_id = message.from_user.id
     if is_vip(user_id):
@@ -3396,12 +3396,12 @@ async def adm_vip_list_cb(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("adm_vip_revoke_") & ~F.data.startswith("adm_vip_revoke_confirm_"))
+@dp.callback_query(F.data.startswith("adm_vip_revoke_"))
 async def adm_vip_revoke_cb(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Ruxsat yo'q", show_alert=True)
         return
-    target_id = int(callback.data.removeprefix("adm_vip_revoke_"))
+    target_id = int(callback.data.split("_")[3])
     target    = get_user(target_id)
     if not target:
         await callback.answer("❌ Foydalanuvchi topilmadi", show_alert=True)
@@ -3432,7 +3432,7 @@ async def adm_vip_revoke_confirm_cb(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Ruxsat yo'q", show_alert=True)
         return
-    target_id = int(callback.data.removeprefix("adm_vip_revoke_confirm_"))
+    target_id = int(callback.data.split("_")[4])
     target    = get_user(target_id)
     name      = (target.get("name") or "Nomsiz") if target else "Nomsiz"
 
@@ -5422,7 +5422,7 @@ async def battle_invite_direct_cb(callback: types.CallbackQuery):
             opp_id,
             f"⚔️ <b>BELLASHUV TAKLIFI!</b>\n\n"
             f"👤 <b>{iname}</b> sizni bellashuvga taklif qilyapti!\n\n"
-            f"🎯 {BATTLE_QUESTION_COUNT} ta savol • 15 soniya • {BATTLE_WIN_BALL} ball\n\n"
+            f"🎯 {BATTLE_QUESTION_COUNT} ta savol • 20 soniya • {BATTLE_WIN_BALL} ball\n\n"
             f"Qabul qilasizmi?",
             reply_markup=kb
         )
@@ -5683,7 +5683,6 @@ async def main():
         BotCommand(command="rating",    description="🏆 Reyting"),
         BotCommand(command="referral",  description="👥 Referal tizimi"),
         BotCommand(command="vip",       description="💎 VIP Panel"),
-        BotCommand(command="admin",       description="dostonbek"),
     ]
     group_commands = [
         BotCommand(command="quiz",     description="🎯 Viktorina boshlash"),
