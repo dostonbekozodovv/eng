@@ -297,3 +297,18 @@ def get_all_user_ids():
     cur.close()
     conn.close()
     return ids
+
+def get_all_vip_users() -> list:
+    """Barcha aktiv VIP foydalanuvchilar ro'yxati (muddati o'tmagan)"""
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT user_id, name, username, vip_since, vip_expires
+        FROM users
+        WHERE is_vip = TRUE
+        ORDER BY vip_expires ASC NULLS LAST
+    """)
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
