@@ -3396,12 +3396,12 @@ async def adm_vip_list_cb(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("adm_vip_revoke_"))
+@dp.callback_query(F.data.startswith("adm_vip_revoke_") & ~F.data.startswith("adm_vip_revoke_confirm_"))
 async def adm_vip_revoke_cb(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Ruxsat yo'q", show_alert=True)
         return
-    target_id = int(callback.data.split("_")[3])
+    target_id = int(callback.data.removeprefix("adm_vip_revoke_"))
     target    = get_user(target_id)
     if not target:
         await callback.answer("❌ Foydalanuvchi topilmadi", show_alert=True)
@@ -3432,7 +3432,7 @@ async def adm_vip_revoke_confirm_cb(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Ruxsat yo'q", show_alert=True)
         return
-    target_id = int(callback.data.split("_")[4])
+    target_id = int(callback.data.removeprefix("adm_vip_revoke_confirm_"))
     target    = get_user(target_id)
     name      = (target.get("name") or "Nomsiz") if target else "Nomsiz"
 
