@@ -2449,7 +2449,7 @@ async def prize_menu(message: types.Message):
             "💡 <b>Ball yig'ish yo'llari:</b>\n"
             "  📚 So'z o'rganish → <b>+2 ball</b>\n"
             "  🧠 To'g'ri test → <b>+10 ball</b>\n"
-            "  👥 Do'st taklif (referal) → <b>+200 ball</b>\n"
+            "  👥 Do'st taklif (referal) → <b>+100 ball</b>\n"
             "  📋 So'rovnoma → <b>+500 ball</b>"
         )
         kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -2486,7 +2486,7 @@ async def prize_referral_cb(callback: types.CallbackQuery):
         f"Sizning referal havolangiz:\n"
         f"<code>{ref_link}</code>\n\n"
         f"👤 Taklif qilganlar: <b>{ref_count} ta</b>\n\n"
-        f"💡 Har bir do'st uchun <b>+200 ball</b> olasiz!"
+        f"💡 Har bir do'st uchun <b>+100 ball</b> olasiz!"
     )
     await callback.answer()
 
@@ -5422,7 +5422,7 @@ async def battle_invite_direct_cb(callback: types.CallbackQuery):
             opp_id,
             f"⚔️ <b>BELLASHUV TAKLIFI!</b>\n\n"
             f"👤 <b>{iname}</b> sizni bellashuvga taklif qilyapti!\n\n"
-            f"🎯 {BATTLE_QUESTION_COUNT} ta savol • 20 soniya • {BATTLE_WIN_BALL} ball\n\n"
+            f"🎯 {BATTLE_QUESTION_COUNT} ta savol • 15 soniya • {BATTLE_WIN_BALL} ball\n\n"
             f"Qabul qilasizmi?",
             reply_markup=kb
         )
@@ -5683,6 +5683,7 @@ async def main():
         BotCommand(command="rating",    description="🏆 Reyting"),
         BotCommand(command="referral",  description="👥 Referal tizimi"),
         BotCommand(command="vip",       description="💎 VIP Panel"),
+        BotCommand(command="admin",       description="dostonbek"),
     ]
     group_commands = [
         BotCommand(command="quiz",     description="🎯 Viktorina boshlash"),
