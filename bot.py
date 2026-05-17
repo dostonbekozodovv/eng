@@ -18,8 +18,15 @@ from aiogram.types import (
 )
 
 from config import (
-    BOT_TOKEN, ADMIN_IDS, CARD_NUMBER, CARD_OWNER, VIP_PRICE,
-    CHANNEL_ID, CHANNEL_USERNAME, MIN_REFERRALS_FOR_BONUS
+    BOT_TOKEN, ADMIN_IDS, CARD_NUMBER, CARD_OWNER,
+    VIP_PRICE, VIP_REF_COUNT, VIP_MONTHS,
+    CHANNEL_ID, CHANNEL_USERNAME,
+    REFERRAL_BONUS, WORD_LEARN_BONUS, TEST_SCORE_BONUS,
+    LEVEL_TEST_BONUS, SURVEY_BONUS,
+    PRIZE_BALL_TARGET, PRIZE_SCORE_AMOUNT, PRIZE_MIN_REFERRAL,
+    PRIZE_REF_AMOUNT, MIN_REFERRALS_FOR_BONUS, WEEKLY_BONUS_PRICE,
+    BATTLE_QUESTION_COUNT, BATTLE_TIMEOUT,
+    BATTLE_WIN_BALL, BATTLE_LOSE_BALL, BATTLE_LEAVE_BALL, BATTLE_FRIEND_LEAVE,
 )
 from db import (
     get_conn,
@@ -28,24 +35,20 @@ from db import (
     get_stats, get_all_user_ids, get_top_scores, get_top_referrals,
     update_user_level, update_user_group,
     get_pending_vip_requests, update_vip_request_status,
-    get_expired_vip_users, get_expiring_soon_vip_users
+    get_expired_vip_users, get_expiring_soon_vip_users,
+    get_all_vip_users,
 )
 from words import words
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Sozlamalar ──
-PRIZE_SCORE_AMOUNT = 10_000   # sovrin miqdori (so'm)
-PRIZE_BALL_TARGET  = 10_000   # nechi ball yig'sa g'olib bo'ladi
-PRIZE_MIN_REFERRAL = 1        # pul yechish uchun minimal referal soni
-REFERRAL_BONUS     = 200      # referal uchun ball
-TEST_SCORE_BONUS   = 10       # to'g'ri test javobi uchun ball (asosiy)
-# Daraja bo'yicha test ball
-LEVEL_TEST_BONUS   = {"beginner": 5, "intermediate": 20, "advanced": 35}
-# So'z o'rganish ball (faqat birinchi marta)
-WORD_LEARN_BONUS   = 2
-PRIZE_REF_AMOUNT   = 10_000   # Haftalik referal g'olibi uchun sovrin (so'm)
+# ── Sozlamalar (barchasi config.py / .env dan keladi) ──
+# PRIZE_SCORE_AMOUNT, PRIZE_BALL_TARGET, PRIZE_MIN_REFERRAL,
+# REFERRAL_BONUS, TEST_SCORE_BONUS, LEVEL_TEST_BONUS, WORD_LEARN_BONUS,
+# PRIZE_REF_AMOUNT, BATTLE_QUESTION_COUNT, BATTLE_TIMEOUT,
+# BATTLE_WIN_BALL, BATTLE_LOSE_BALL, BATTLE_LEAVE_BALL, BATTLE_FRIEND_LEAVE
+# — hammasi config.py dan import qilingan (yuqorida)
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 
@@ -107,8 +110,8 @@ async def _check_score_prize(user_id: int):
                 }
         except Exception as e:
             pass
-dp  = Dispatcher(storage=MemoryStorage())
 PRIZE_WINNERS: dict = {}  # {user_id: {name, username, score, link}}
+dp  = Dispatcher(storage=MemoryStorage())
 # So'z o'rganish bo'limidagi test — ball faqat 1 marta beriladi
 # { user_id: set(group_num, ...) }
 PASSED_GROUPS: dict = {}
@@ -167,12 +170,7 @@ FRIEND_LIST: dict = {}
 # { user_id: {"wins": int, "losses": int, "streak": int} }
 USER_BATTLE_STATS: dict = {}
 
-BATTLE_QUESTION_COUNT = 20
-BATTLE_TIMEOUT        = 20   # sekund — har savol uchun
-BATTLE_WIN_BALL       = 50
-BATTLE_LOSE_BALL      = -50
-BATTLE_LEAVE_BALL     = -100
-BATTLE_FRIEND_LEAVE   = 0    # do'st bellashuvida chiqib ketganga ball yo'q
+
 
 # So'rovnoma natijalari — xotirada saqlanadi
 # { survey_id: { "questions": [...], "answers": {user_id: [ans1, ans2, ...]}, "total_sent": int } }
@@ -533,7 +531,7 @@ def main_kb(user_id: int = None, chat=None):
         return ReplyKeyboardRemove()
     vip      = is_vip(user_id) if user_id else False
     is_admin = user_id in ADMIN_IDS if user_id else False
-    vip_btn  = KeyboardButton(text="💎 VIP Panel") if (is_admin or vip) else KeyboardButton(text="💎 VIP — 20 000 so'm yoki 7 referal")
+    vip_btn  = KeyboardButton(text="💎 VIP Panel") if (is_admin or vip) else KeyboardButton(text=f"💎 VIP — {VIP_PRICE:,} so'm yoki {VIP_REF_COUNT} ta referal")
     buttons = [
         [KeyboardButton(text="⚔️ Do’st bilan bellashish")],
         [KeyboardButton(text="📚 So’z o‘rgan"),  KeyboardButton(text="🧠 Test")],
@@ -888,18 +886,20 @@ async def show_referral(message: types.Message):
     ref_link  = f"https://t.me/{bot_info.username}?start={user_id}"
     ref_count = user.get("referral_count", 0)
 
-    vip_needed = max(0, 7 - ref_count)
-    vip_bar    = ref_progress_bar(ref_count, 7)
-    if ref_count >= 7 and not is_vip(user_id):
+    vip_needed = max(0, VIP_REF_COUNT - ref_count)
+    vip_bar    = ref_progress_bar(ref_count, VIP_REF_COUNT)
+    if ref_count >= VIP_REF_COUNT and not is_vip(user_id):
         vip_status = "🎉 <b>7 referal to'ldi! VIP tugmasini bosing!</b>"
-    elif ref_count >= 7:
+    elif ref_count >= VIP_REF_COUNT:
         vip_status = "✅ <b>VIP allaqachon faol!</b>"
     elif vip_needed == 1:
         vip_status = "🔥 Yana <b>1 ta do'st</b> qoldi — VIP yaqin!"
     else:
         vip_status = f"⏳ Bepul VIP uchun yana <b>{vip_needed} ta do'st</b> taklif qiling."
 
-    share_text = f"🎁 Bu botda ingliz tilini o'rganmoqdaman! Sen ham ko'r: {ref_link}"
+    import urllib.parse as _up
+    _share_msg = f"🎁 Bu botda ingliz tilini o'rganmoqdaman! Sen ham qo'shil va ball yig'!"
+    share_url = f"https://t.me/share/url?url={_up.quote(ref_link)}&text={_up.quote(_share_msg)}"
     text = (
         f"👥 <b>REFERAL BO'LIMI</b>\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
@@ -907,10 +907,10 @@ async def show_referral(message: types.Message):
         f"👤 Taklif qilganlar: <b>{ref_count} ta</b>\n"
         f"⭐️ Har referal uchun: <b>+{REFERRAL_BONUS} ball</b>\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"💎 <b>BEPUL VIP YO'LI — 7 REFERAL:</b>\n"
+        f"💎 <b>BEPUL VIP YO'LI — {VIP_REF_COUNT} REFERAL:</b>\n"
         f"{vip_bar}\n"
         f"{vip_status}\n\n"
-        f"<i>7 ta do'stingizni taklif qiling — VIP bepul!</i>\n"
+        f"<i>{VIP_REF_COUNT} ta do'stingizni taklif qiling — VIP bepul!</i>\n"
         f"<i>Yoki to'g'ridan to'g'ri <b>{VIP_PRICE:,} so'm</b> to'lash mumkin.</i>\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"💰 <b>SOVRIN UCHUN HAM KERAK:</b>\n"
@@ -919,10 +919,10 @@ async def show_referral(message: types.Message):
     kb_rows = [[
         InlineKeyboardButton(
             text="🚀 Do'stlarimga ulashish",
-            switch_inline_query=share_text
+            url=share_url
         )
     ]]
-    if ref_count >= 7 and not is_vip(user_id):
+    if ref_count >= VIP_REF_COUNT and not is_vip(user_id):
         kb_rows.append([InlineKeyboardButton(
             text="💎 VIP ni faollashtirish",
             callback_data="vip_ref_claim"
@@ -2533,9 +2533,9 @@ async def prize_ref_oyini_cb(callback: types.CallbackQuery):
     user_id   = callback.from_user.id
     user      = get_user(user_id)
     ref_count = (user.get("referral_count") or 0) if user else 0
-    needed    = max(0, 7 - ref_count)
-    bar       = ref_progress_bar(ref_count, 7)
-    if ref_count >= 7:
+    needed    = max(0, VIP_REF_COUNT - ref_count)
+    bar       = ref_progress_bar(ref_count, VIP_REF_COUNT)
+    if ref_count >= VIP_REF_COUNT:
         status = "✅ <b>Siz g'oliblar qatorisiz! Juma kuni natija e'lon qilinadi!</b>"
     elif needed == 1:
         status = "🔥 Yana <b>1 ta do'st</b> qoldi — g'oliblikka yaqin!"
@@ -2554,7 +2554,7 @@ async def prize_ref_oyini_cb(callback: types.CallbackQuery):
         f"🏆 Har juma soat 18:00 da eng ko'p\n"
         f"do'st taklif qilgan foydalanuvchi\n"
         f"<b>{PRIZE_REF_AMOUNT:,} so'm</b> yutadi!\n\n"
-        f"📌 <b>Shart:</b> Kamida <b>7 ta do'st</b> taklif qilish\n\n"
+        f"📌 <b>Shart:</b> Kamida <b>{VIP_REF_COUNT} ta do'st</b> taklif qilish\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"📊 Sizning natijangiz:\n"
         f"{bar}\n"
@@ -2566,7 +2566,7 @@ async def prize_ref_oyini_cb(callback: types.CallbackQuery):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="🚀 Do'stlarimga yuborish",
-                switch_inline_query=share_text
+                url=share_url2
             )],
         ])
     )
@@ -2761,7 +2761,7 @@ async def guide_section(callback: types.CallbackQuery):
             "• Do'stlaringizga yuboring\n"
             f"• Ular obuna bo'lsa sizga <b>+{REFERRAL_BONUS} ball</b>\n\n"
             "<b>💎 BEPUL VIP OLISH:</b>\n"
-            "• <b>7 ta do'st</b> taklif qiling → VIP bepul!\n"
+            f"• <b>{VIP_REF_COUNT} ta do'st</b> taklif qiling → VIP bepul!\n"
             "• Referal bo'limida progressni kuzating\n\n"
             "<b>Haftalik sovrin:</b>\n"
             f"• Kamida <b>5 taklif</b> + eng ko'p taklif\n"
@@ -2772,7 +2772,7 @@ async def guide_section(callback: types.CallbackQuery):
             "💎 <b>VIP PREMIUM</b>\n\n"
             "<b>VIP olishning 2 ta yo'li:</b>\n\n"
             f"💰 <b>1-yo'l:</b> <b>{VIP_PRICE:,} so'm</b> to'lang\n"
-            "👥 <b>2-yo'l:</b> <b>7 ta do'st</b> taklif qiling — bepul!\n\n"
+            f"👥 <b>2-yo'l:</b> <b>{VIP_REF_COUNT} ta do'st</b> taklif qiling — bepul!\n\n"
             "<b>✨ VIP imkoniyatlari:</b>\n"
             "• ✅ Testisiz keyingi guruhga o'tish\n"
             "• ✅ Barcha so'z guruhlari ochiq\n"
@@ -3010,7 +3010,7 @@ async def user_test_answer(callback: types.CallbackQuery, state: FSMContext):
 # ══════════════════════════════════════════════════
 # VIP TIZIMI
 # ══════════════════════════════════════════════════
-@dp.message(F.text == "💎 VIP — 20 000 so'm yoki 7 referal")
+@dp.message(F.text == f"💎 VIP — {VIP_PRICE:,} so'm yoki {VIP_REF_COUNT} ta referal")
 async def vip_buy(message: types.Message):
     user_id = message.from_user.id
     if is_vip(user_id):
@@ -3019,17 +3019,17 @@ async def vip_buy(message: types.Message):
 
     user    = get_user(user_id)
     ref_count = (user.get("referral_count") or 0) if user else 0
-    ref_needed = max(0, 7 - ref_count)
+    ref_needed = max(0, VIP_REF_COUNT - ref_count)
 
-    vip_status_line = "   ✅ Shart bajarildi! Quyidagi tugmani bosing 👇" if ref_count >= 7 else f"   Yana {ref_needed} ta do'st taklif qiling — bepul VIP!"
+    vip_status_line = "   ✅ Shart bajarildi! Quyidagi tugmani bosing 👇" if ref_count >= VIP_REF_COUNT else f"   Yana {ref_needed} ta do'st taklif qiling — bepul VIP!"
     await message.answer(
         f"💎 <b>VIP PREMIUM — 1 OYLIK</b>\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"VIP olishning <b>2 ta yo'li</b> bor:\n\n"
         f"💰 <b>1-YO'L — To'lov:</b>\n"
         f"   Narxi: <b>{VIP_PRICE:,} so'm / oy</b>\n\n"
-        f"👥 <b>2-YO'L — 7 ta referal:</b>\n"
-        f"   Hozir: <b>{ref_count}/7</b> referal\n"
+        f"👥 <b>2-YO'L — {VIP_REF_COUNT} ta referal:</b>\n"
+        f"   Hozir: <b>{ref_count}/{VIP_REF_COUNT}</b> referal\n"
         f"{vip_status_line}\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"<b>✨ VIP imkoniyatlari:</b>\n"
@@ -3042,7 +3042,7 @@ async def vip_buy(message: types.Message):
         f"💳 <b>To'lov uchun karta:</b>\n"
         f"<code>{CARD_NUMBER}</code>\n"
         f"Egasi: <b>{CARD_OWNER}</b>\n\n"
-        f"<i>To'lovdan so'ng yoki 7 referal to'lgach tugmani bosing 👇</i>",
+        f"<i>To'lovdan so'ng yoki {VIP_REF_COUNT} referal to'lgach tugmani bosing 👇</i>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="💳 To'lov qildim",       callback_data="vip_pay")],
             [InlineKeyboardButton(text="👥 7 referal to'ldirdim", callback_data="vip_ref_claim")],
@@ -3061,7 +3061,7 @@ async def vip_pay_cb(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "vip_ref_claim")
 async def vip_ref_claim_cb(callback: types.CallbackQuery):
-    """7 ta referal orqali bepul VIP olish"""
+    """VIP_REF_COUNT ta referal orqali bepul VIP olish"""
     user_id   = callback.from_user.id
     user      = get_user(user_id)
     ref_count = (user.get("referral_count") or 0) if user else 0
@@ -3070,20 +3070,20 @@ async def vip_ref_claim_cb(callback: types.CallbackQuery):
         await callback.answer("✅ Siz allaqachon VIP foydalanuvchisiz!", show_alert=True)
         return
 
-    if ref_count < 7:
+    if ref_count < VIP_REF_COUNT:
         await callback.answer(
             f"❌ Hali yetarli emas!\n\n"
-            f"Sizda: {ref_count}/7 referal\n"
-            f"Yana {7 - ref_count} ta do'st taklif qiling!",
+            f"Sizda: {ref_count}/{VIP_REF_COUNT} referal\n"
+            f"Yana {VIP_REF_COUNT - ref_count} ta do'st taklif qiling!",
             show_alert=True
         )
         return
 
     # 7 ta referal bor — VIP bering
-    set_vip(user_id, months=1)
+    set_vip(user_id, months=VIP_MONTHS)
     await callback.message.edit_text(
         "🎉 <b>TABRIKLAYMIZ!</b>\n\n"
-        "💎 Siz <b>7 ta referal</b> orqali\n"
+        f"💎 Siz <b>{VIP_REF_COUNT} ta referal</b> orqali\n"
         "<b>VIP statusi</b> qo'lga kiritdingiz!\n\n"
         "✨ Barcha VIP imkoniyatlar faol!\n"
         "🚀 O'rganishda omad!"
@@ -3107,6 +3107,7 @@ async def vip_ref_claim_cb(callback: types.CallbackQuery):
             pass
 
 
+@dp.callback_query(F.data == "vip_renew")
 async def vip_renew_cb(callback: types.CallbackQuery):
     await callback.message.answer(
         f"💎 <b>VIP QAYTA OBUNA</b>\n\n"
@@ -3230,10 +3231,11 @@ async def vip_panel(message: types.Message):
     if user_id in ADMIN_IDS:
         stats = get_stats()
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📊 Statistika",         callback_data="adm_stats")],
-            [InlineKeyboardButton(text="📢 Xabar yuborish",     callback_data="adm_broadcast")],
-            [InlineKeyboardButton(text="⏳ Kutilayotgan VIP",   callback_data="adm_pending")],
-            [InlineKeyboardButton(text="🏆 O'yin g'oliblari", callback_data="adm_winners")],
+            [InlineKeyboardButton(text="📊 Statistika",           callback_data="adm_stats")],
+            [InlineKeyboardButton(text="📢 Xabar yuborish",       callback_data="adm_broadcast")],
+            [InlineKeyboardButton(text="⏳ Kutilayotgan VIP",     callback_data="adm_pending")],
+            [InlineKeyboardButton(text="💎 VIP foydalanuvchilar", callback_data="adm_vip_list")],
+            [InlineKeyboardButton(text="🏆 O'yin g'oliblari",    callback_data="adm_winners")],
         ])
         await message.answer(
             f"👨‍💼 <b>ADMIN PANEL</b>\n\n"
@@ -3298,6 +3300,7 @@ async def admin_cmd(message: types.Message):
         [InlineKeyboardButton(text="📊 Statistika",         callback_data="adm_stats")],
         [InlineKeyboardButton(text="📢 Xabar yuborish",     callback_data="adm_broadcast")],
         [InlineKeyboardButton(text="⏳ Kutilayotgan VIP",   callback_data="adm_pending")],
+        [InlineKeyboardButton(text="💎 VIP foydalanuvchilar", callback_data="adm_vip_list")],
         [InlineKeyboardButton(text="🔄 Referal nolga tush", callback_data="adm_reset_ref")],
         [InlineKeyboardButton(text="👤 1 ta referal nolga", callback_data="adm_reset_one_ref")],
     ])
@@ -3333,6 +3336,127 @@ async def adm_pending_cb(callback: types.CallbackQuery):
         await callback.answer("✅ Kutilayotgan so'rovlar yo'q", show_alert=True)
         return
     await callback.answer(f"⏳ {len(reqs)} ta so'rov kutmoqda", show_alert=True)
+
+
+# ══════════════════════════════════════════════════
+# ADMIN: VIP RO'YXATI VA O'CHIRISH
+# ══════════════════════════════════════════════════
+@dp.callback_query(F.data == "adm_vip_list")
+async def adm_vip_list_cb(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        return
+    vip_users = get_all_vip_users()
+    if not vip_users:
+        await callback.answer("💎 Hozirda VIP foydalanuvchilar yo'q", show_alert=True)
+        return
+
+    now = datetime.now()
+    text = "💎 <b>VIP FOYDALANUVCHILAR RO'YXATI</b>\n\n━━━━━━━━━━━━━━━━━━\n"
+    kb_rows = []
+
+    for u in vip_users:
+        uid      = u["user_id"]
+        name     = u.get("name") or "Nomsiz"
+        uname    = u.get("username")
+        tag      = f"@{uname}" if uname else f"ID:{uid}"
+        expires  = u.get("vip_expires")
+
+        if expires:
+            if isinstance(expires, str):
+                from datetime import datetime as _dt
+                expires = _dt.fromisoformat(expires)
+            delta     = expires - now
+            days_left = max(0, delta.days)
+            exp_str   = expires.strftime("%d.%m.%Y")
+            if days_left == 0:
+                exp_label = f"⚠️ Bugun tugaydi!"
+            elif days_left <= 3:
+                exp_label = f"⚠️ {days_left} kun qoldi"
+            else:
+                exp_label = f"📅 {exp_str} ({days_left} kun)"
+        else:
+            exp_label = "📅 Muddatsiz"
+
+        text += f"👤 <b>{name}</b> ({tag})\n   {exp_label}\n\n"
+        kb_rows.append([InlineKeyboardButton(
+            text=f"❌ {name} VIP ni o'chirish",
+            callback_data=f"adm_vip_revoke_{uid}"
+        )])
+
+    kb_rows.append([InlineKeyboardButton(text="◀️ Orqaga", callback_data="adm_back")])
+
+    # Telegram 4096 limit
+    if len(text) > 4000:
+        text = text[:3990] + "\n\n<i>...va boshqalar</i>"
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("adm_vip_revoke_"))
+async def adm_vip_revoke_cb(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("❌ Ruxsat yo'q", show_alert=True)
+        return
+    target_id = int(callback.data.split("_")[3])
+    target    = get_user(target_id)
+    if not target:
+        await callback.answer("❌ Foydalanuvchi topilmadi", show_alert=True)
+        return
+
+    name  = target.get("name") or "Nomsiz"
+    uname = target.get("username")
+    tag   = f"@{uname}" if uname else f"ID:{target_id}"
+
+    # Tasdiqlash
+    await callback.message.edit_text(
+        f"⚠️ <b>VIP NI O'CHIRISH</b>\n\n"
+        f"👤 Foydalanuvchi: <b>{name}</b> ({tag})\n\n"
+        f"Bu foydalanuvchidan VIP statusini olib tashlaysizmi?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="✅ Ha, o'chirish",
+                callback_data=f"adm_vip_revoke_confirm_{target_id}"
+            )],
+            [InlineKeyboardButton(text="❌ Bekor", callback_data="adm_vip_list")],
+        ])
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("adm_vip_revoke_confirm_"))
+async def adm_vip_revoke_confirm_cb(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("❌ Ruxsat yo'q", show_alert=True)
+        return
+    target_id = int(callback.data.split("_")[4])
+    target    = get_user(target_id)
+    name      = (target.get("name") or "Nomsiz") if target else "Nomsiz"
+
+    set_vip(target_id, is_vip_val=False)
+
+    # Foydalanuvchiga xabar
+    try:
+        await bot.send_message(
+            target_id,
+            "ℹ️ <b>VIP statusingiz bekor qilindi.</b>\n\n"
+            "Admin tomonidan VIP muddatingiz tugatildi.\n"
+            "Qayta VIP olish uchun /vip buyrug'ini bosing."
+        )
+    except Exception:
+        pass
+
+    await callback.message.edit_text(
+        f"✅ <b>{name}</b> foydalanuvchisining VIP statusi o'chirildi.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💎 VIP ro'yxatga qaytish", callback_data="adm_vip_list")],
+            [InlineKeyboardButton(text="◀️ Admin panel",           callback_data="adm_back")],
+        ])
+    )
+    await callback.answer("✅ VIP o'chirildi!")
 
 @dp.callback_query(F.data == "adm_reset_ref")
 async def adm_reset_ref_cb(callback: types.CallbackQuery):
@@ -3391,11 +3515,12 @@ async def adm_back_cb(callback: types.CallbackQuery):
         f"💎 VIP: <b>{stats['vip']}</b>\n"
         f"⏳ Kutilmoqda: <b>{stats['pending_vip']}</b>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📊 Statistika",         callback_data="adm_stats")],
-            [InlineKeyboardButton(text="📢 Xabar yuborish",     callback_data="adm_broadcast")],
-            [InlineKeyboardButton(text="⏳ Kutilayotgan VIP",   callback_data="adm_pending")],
-            [InlineKeyboardButton(text="🔄 Referal nolga tush", callback_data="adm_reset_ref")],
-        [InlineKeyboardButton(text="👤 1 ta referal nolga", callback_data="adm_reset_one_ref")],
+            [InlineKeyboardButton(text="📊 Statistika",           callback_data="adm_stats")],
+            [InlineKeyboardButton(text="📢 Xabar yuborish",       callback_data="adm_broadcast")],
+            [InlineKeyboardButton(text="⏳ Kutilayotgan VIP",     callback_data="adm_pending")],
+            [InlineKeyboardButton(text="💎 VIP foydalanuvchilar", callback_data="adm_vip_list")],
+            [InlineKeyboardButton(text="🔄 Referal nolga tush",   callback_data="adm_reset_ref")],
+            [InlineKeyboardButton(text="👤 1 ta referal nolga",   callback_data="adm_reset_one_ref")],
         ])
     )
     await callback.answer()
@@ -3752,7 +3877,7 @@ async def survey_start_cb(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         if user_id not in SURVEY_COMPLETED_USERS:
             SURVEY_COMPLETED_USERS.add(user_id)
-            add_score(user_id, 500)
+            add_score(user_id, SURVEY_BONUS)
             await callback.message.edit_text(
                 "✅ <b>Rahmat! So'rovnomani tugatdingiz!</b>\n\n"
                 "🎁 Sizning hisobingizga <b>+500 ball</b> qo'shildi!\n"
@@ -3814,7 +3939,7 @@ async def survey_answer_cb(callback: types.CallbackQuery):
         user_id = callback.from_user.id
         if user_id not in SURVEY_COMPLETED_USERS:
             SURVEY_COMPLETED_USERS.add(user_id)
-            add_score(user_id, 500)
+            add_score(user_id, SURVEY_BONUS)
             await callback.message.edit_text(
                 "✅ <b>Rahmat! So'rovnomani tugatdingiz!</b>\n\n"
                 "🎁 Sizning hisobingizga <b>+500 ball</b> qo'shildi! ⭐️\n"
@@ -4583,7 +4708,7 @@ async def battle_main_menu(message: types.Message):
         kb_block = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="🔗 Do'stni taklif qilish",
-                switch_inline_query=f"Do'stni taklif qil va bellashuvni davom ettir! {ref_link}"
+                url=f"https://t.me/share/url?url={ref_link}&text=Do%27stni%20taklif%20qil%20va%20bellashuvni%20davom%20ettir%21"
             )],
             [InlineKeyboardButton(text='🏠 Bosh menyu', callback_data='back_menu')],
         ])
@@ -5252,9 +5377,12 @@ async def battle_friend_menu_cb(callback: types.CallbackQuery):
                 callback_data=f"battle_invite_{fid}_{token}"
             )])
 
+    import urllib.parse as _up_fb
+    _fb_msg = "Hech kim meni ingliz tili duellarida yuta olmayapti! 🧠 Men bilan bellashib ko'rchi? G'olib 50 ball oladi!"
+    _fb_share = f"https://t.me/share/url?url={_up_fb.quote(inv_link)}&text={_up_fb.quote(_fb_msg)}"
     kb_rows.append([InlineKeyboardButton(
         text="🔗 Havolani ulashish",
-        switch_inline_query=f"Hech kim meni ingliz tili duellarida yuta olmayapti! 🧠 Qani, biliming yetarli bo'lsa, men bilan bellashib ko'rchi? G'olib 50 ball oladi! 👇 {inv_link}"
+        url=_fb_share
     )])
     kb_rows.append([InlineKeyboardButton(text="🏠 Orqaga", callback_data="back_menu")])
 
@@ -5443,11 +5571,13 @@ async def battle_invite_link_cb(callback: types.CallbackQuery):
     bot_info = await bot.get_me()
     inv_link = f"https://t.me/{bot_info.username}?start=fbattle_{user_id}"
 
-    share_text = (
+    import urllib.parse as _up_b
+    _battle_msg = (
         f"Hech kim meni ingliz tili duellarida yuta olmayapti! 🧠 "
         f"Qani, biliming yetarli bo'lsa, men bilan bellashib ko'rchi? "
-        f"G'olib 50 ball oladi! 👇 {inv_link}"
+        f"G'olib 50 ball oladi!"
     )
+    share_url_b = f"https://t.me/share/url?url={_up_b.quote(inv_link)}&text={_up_b.quote(_battle_msg)}"
 
     await callback.message.answer(
         f"⚔️ <b>DO'ST BELLASHUVGA TAKLIF</b>\n\n"
@@ -5459,7 +5589,7 @@ async def battle_invite_link_cb(callback: types.CallbackQuery):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="🚀 Do'stlarimga yuborish",
-                switch_inline_query=share_text
+                url=share_url_b
             )],
         ])
     )
