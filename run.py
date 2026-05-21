@@ -80,4 +80,3 @@ if __name__ == "__main__":
 
     # Botni asosiy loop da ishga tushir
     asyncio.run(start_bot())
-
