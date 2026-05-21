@@ -5,4 +5,4 @@ nixPkgs = ["python311", "libpqxx", "gcc"]
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "python bot.py"
+cmd = "python run.py"
