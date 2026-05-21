@@ -1,18 +1,6 @@
 """
 run.py — Railway da bot + API birga ishga tushirish
-
-Railway environment variables:
-  BOT_TOKEN = your_bot_token
-  DATABASE_URL = postgresql://...
-  DEBUG = false          # production da false bo'lsin
-  API_PORT = 8000        # Railway o'zi beradi (PORT env)
-
-Procfile (Railway da faqat bitta process):
-  web: python run.py
-
-Bu fayl:
-  1) FastAPI serverni background thread da ishga tushiradi
-  2) Aiogram botni asosiy threadda polling qiladi
+Bot fayli: bot.py
 """
 
 import asyncio
@@ -20,7 +8,6 @@ import os
 import threading
 import uvicorn
 
-# API ni import qilish
 from api import app as fastapi_app
 
 API_PORT = int(os.getenv("PORT", os.getenv("API_PORT", 8000)))
@@ -33,18 +20,18 @@ def start_api():
         fastapi_app,
         host="0.0.0.0",
         port=API_PORT,
-        log_level="warning",
+        log_level="info",
     )
 
 
 async def start_bot():
-    """Aiogram botni ishga tushirish"""
+    """bot.py dagi bot ni ishga tushirish"""
     from db import init_db
     init_db()
     print("🤖 Bot starting...")
 
-    # Boot.py dagi main() ni chaqirish
-    from Boot import dp, bot, weekly_bonus_task, vip_expiry_task
+    # bot.py dan import (Boot.py emas!)
+    from bot import dp, bot
     from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats
 
     private_commands = [
@@ -68,15 +55,22 @@ async def start_bot():
     await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
     await bot.set_my_commands(group_commands,   scope=BotCommandScopeAllGroupChats())
 
-    asyncio.create_task(weekly_bonus_task())
-    asyncio.create_task(vip_expiry_task())
+    # bot.py da mavjud bo'lsa weekly_bonus_task va vip_expiry_task ni ham ishga tushir
+    try:
+        from bot import weekly_bonus_task, vip_expiry_task
+        asyncio.create_task(weekly_bonus_task())
+        asyncio.create_task(vip_expiry_task())
+        print("✅ Background tasks started")
+    except ImportError:
+        print("⚠️  weekly_bonus_task / vip_expiry_task topilmadi, o'tkazildi")
+
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 
 if __name__ == "__main__":
-    # API ni thread da ishga tushir
+    # API ni background thread da ishga tushir
     api_thread = threading.Thread(target=start_api, daemon=True)
     api_thread.start()
 
-    # Botni asosiy loop da ishga tushir
+    # Botni asosiy asyncio loop da ishga tushir
     asyncio.run(start_bot())
