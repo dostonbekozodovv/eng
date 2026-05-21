@@ -43,8 +43,8 @@ async def start_bot():
     init_db()
     print("🤖 Bot starting...")
 
-    # Boot.py dagi main() ni chaqirish
-    from Boot import dp, bot, weekly_bonus_task, vip_expiry_task
+    # bot.py dagi main() ni chaqirish
+    from bot import dp, bot, weekly_bonus_task, vip_expiry_task
     from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats
 
     private_commands = [
