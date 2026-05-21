@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VocabLearn</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080810;--surf:#10101a;--card:#15151f;--bord:rgba(255,255,255,.07);
+  --gold:#f5c842;--gold2:#e8a020;--cyan:#00e5ff;--violet:#8b5cf6;
+  --rose:#f43f5e;--green:#22d3a0;--text:#f0f0f8;--muted:rgba(240,240,248,.45);
+  --r:18px;--rs:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
+  font-size:15px;line-height:1.5;min-height:100vh;overflow-x:hidden}
+.aura{position:fixed;border-radius:50%;pointer-events:none;z-index:0;filter:blur(70px)}
+.aura1{top:-25%;left:-15%;width:60vw;height:60vw;
+  background:radial-gradient(ellipse,rgba(139,92,246,.16) 0%,transparent 70%);
+  animation:drift 14s ease-in-out infinite alternate}
+.aura2{bottom:-20%;right:-15%;width:55vw;height:55vw;
+  background:radial-gradient(ellipse,rgba(0,229,255,.1) 0%,transparent 70%);
+  animation:drift 18s ease-in-out infinite alternate-reverse}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(6%,8%)}}
+#app{position:relative;z-index:1;padding-bottom:84px}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:24px 18px 16px}
+.hdr-l{display:flex;align-items:center;gap:13px}
+.ava{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--cyan));
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Syne',sans-serif;font-weight:800;font-size:17px;
+  box-shadow:0 0 0 3px rgba(139,92,246,.28);flex-shrink:0}
+.hdr-name{font-family:'Syne',sans-serif;font-weight:700;font-size:16px}
+.hdr-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.vip-pill{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#000;
+  font-family:'Syne',sans-serif;font-weight:800;font-size:10px;padding:3px 9px;
+  border-radius:20px;letter-spacing:.5px}
+.tnav{display:flex;gap:6px;padding:0 18px 16px;overflow-x:auto;scrollbar-width:none}
+.tnav::-webkit-scrollbar{display:none}
+.tb{flex-shrink:0;padding:7px 15px;border-radius:30px;border:1.5px solid var(--bord);
+  background:transparent;color:var(--muted);font-family:'Syne',sans-serif;font-weight:600;
+  font-size:12px;cursor:pointer;transition:all .22s;white-space:nowrap}
+.tb.on{background:linear-gradient(135deg,var(--violet),#6d28d9);border-color:transparent;
+  color:#fff;box-shadow:0 4px 20px rgba(139,92,246,.38)}
+.pg{display:none;padding:0 18px;animation:fu .3s ease}
+.pg.on{display:block}
+@keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--card);border:1px solid var(--bord);border-radius:var(--r);
+  padding:18px;margin-bottom:13px;overflow:hidden}
+.ctitle{font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:var(--muted);
+  letter-spacing:.8px;text-transform:uppercase;margin-bottom:13px;
+  display:flex;align-items:center;gap:8px}
+.ctitle .dot{width:6px;height:6px;border-radius:50%;background:var(--violet);flex-shrink:0}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:13px}
+.sc{background:var(--card);border:1px solid var(--bord);border-radius:var(--r);
+  padding:17px 15px;position:relative;overflow:hidden;transition:transform .18s}
+.sc:active{transform:scale(.97)}
+.sc::after{content:'';position:absolute;top:-28px;right:-28px;width:85px;height:85px;
+  border-radius:50%;opacity:.07}
+.sc.go::after{background:var(--gold)}.sc.cy::after{background:var(--cyan)}
+.sc.ro::after{background:var(--rose)}.sc.gr::after{background:var(--green)}
+.sc-ic{font-size:20px;margin-bottom:9px}
+.sc-v{font-family:'Syne',sans-serif;font-weight:800;font-size:24px;line-height:1;margin-bottom:3px}
+.sc-l{font-size:10px;color:var(--muted);font-weight:500;letter-spacing:.3px}
+.sc.go .sc-v{color:var(--gold)}.sc.cy .sc-v{color:var(--cyan)}
+.sc.ro .sc-v{color:var(--rose)}.sc.gr .sc-v{color:var(--green)}
+.pw{margin-bottom:10px}
+.pm{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:7px}
+.pm .v{font-family:'Syne',sans-serif;font-weight:700;color:var(--text)}
+.pt{height:7px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden}
+.pf{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--violet),var(--cyan));
+  box-shadow:0 0 10px rgba(0,229,255,.35);transition:width 1.1s cubic-bezier(.22,1,.36,1)}
+.pf.go{background:linear-gradient(90deg,var(--gold2),var(--gold));box-shadow:0 0 10px rgba(245,200,66,.35)}
+.pf.ro{background:linear-gradient(90deg,#be123c,var(--rose));box-shadow:0 0 10px rgba(244,63,94,.3)}
+.str-row{display:flex;align-items:center;gap:13px;margin-bottom:13px}
+.str-num{font-family:'Syne',sans-serif;font-weight:800;font-size:46px;line-height:1;
+  color:var(--gold);text-shadow:0 0 28px rgba(245,200,66,.45)}
+.str-inf .t{font-family:'Syne',sans-serif;font-weight:700;font-size:15px}
+.str-inf .s{font-size:11px;color:var(--muted);margin-top:2px}
+.flames{display:flex;gap:3px;margin-top:11px}
+.fl{flex:1;height:34px;border-radius:7px;display:flex;align-items:center;
+  justify-content:center;font-size:14px;background:rgba(255,255,255,.04);border:1px solid var(--bord)}
+.fl.lit{background:linear-gradient(180deg,rgba(245,200,66,.18),rgba(232,160,32,.08));
+  border-color:rgba(245,200,66,.28);animation:flk 2.2s ease-in-out infinite}
+@keyframes flk{0%,100%{opacity:1}50%{opacity:.8}}
+/* LEARN */
+.ws-num{font-size:11px;color:var(--muted);font-family:'Syne',sans-serif;
+  font-weight:700;letter-spacing:.8px;margin-bottom:16px;text-align:center}
+.ws-en{font-family:'Syne',sans-serif;font-weight:800;font-size:36px;
+  color:var(--text);line-height:1.1;margin-bottom:8px;text-align:center;
+  animation:popIn .35s cubic-bezier(.34,1.56,.64,1)}
+.ws-pron{font-size:13px;color:var(--cyan);margin-bottom:14px;font-style:italic;text-align:center}
+.ws-uz{font-family:'Syne',sans-serif;font-weight:700;font-size:22px;color:var(--gold);
+  margin-bottom:14px;text-align:center;animation:popIn .35s cubic-bezier(.34,1.56,.64,1)}
+.ws-ex{font-size:13px;color:var(--muted);font-style:italic;background:rgba(255,255,255,.04);
+  border-radius:10px;padding:10px 14px;border-left:3px solid var(--violet);
+  margin-bottom:18px;width:100%}
+.ws-ex b{color:var(--text);font-style:normal}
+@keyframes popIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+.nbtn{width:100%;padding:15px;border-radius:14px;border:none;
+  background:linear-gradient(135deg,var(--violet),#6d28d9);color:#fff;
+  font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;
+  transition:all .2s;box-shadow:0 6px 24px rgba(139,92,246,.35);margin-bottom:10px}
+.nbtn:active{transform:scale(.97)}
+.nbtn.fin{background:linear-gradient(135deg,var(--green),#059669)}
+.nbtn.qbtn{background:linear-gradient(135deg,var(--gold2),#b45309)}
+.nbtn.sec{background:rgba(255,255,255,.07);color:var(--text);box-shadow:none}
+/* JOURNAL */
+.jw{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--bord)}
+.jw:last-child{border-bottom:none}
+.jw-num{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;color:var(--muted);min-width:22px}
+.jw-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.jw-dot.b{background:var(--green)}.jw-dot.i{background:var(--gold)}.jw-dot.a{background:var(--rose)}
+.jw-en{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;flex:1}
+.jw-uz{font-size:12px;color:var(--muted)}
+/* QUIZ */
+.qprog{font-size:12px;color:var(--muted);text-align:center;margin-bottom:10px;
+  font-family:'Syne',sans-serif;font-weight:600}
+.qsrow{display:flex;justify-content:center;gap:20px;margin-bottom:14px}
+.qsi{text-align:center}
+.qsv{font-family:'Syne',sans-serif;font-weight:800;font-size:20px}
+.qsl{font-size:10px;color:var(--muted)}
+.qword{font-family:'Syne',sans-serif;font-weight:800;font-size:28px;text-align:center;
+  margin:10px 0 6px;animation:popIn .3s cubic-bezier(.34,1.56,.64,1)}
+.qsub{font-size:12px;color:var(--muted);text-align:center;margin-bottom:16px}
+.agrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.abtn{padding:14px 10px;border-radius:var(--rs);border:1.5px solid var(--bord);
+  background:var(--surf);color:var(--text);font-family:'Syne',sans-serif;
+  font-weight:600;font-size:13px;cursor:pointer;transition:all .2s;text-align:center}
+.abtn:active:not(:disabled){transform:scale(.96)}
+.abtn.correct{background:rgba(34,211,160,.15);border-color:var(--green);color:var(--green)}
+.abtn.wrong{background:rgba(244,63,94,.12);border-color:var(--rose);color:var(--rose)}
+.abtn:disabled{cursor:default}
+/* RESULT */
+.resbox{text-align:center;padding:18px 0}
+.resi{font-size:50px;margin-bottom:10px}
+.rest{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;margin-bottom:6px}
+.ress{font-size:13px;color:var(--muted);margin-bottom:18px}
+.rss{display:flex;justify-content:center;gap:24px;margin-bottom:20px}
+.rsi{text-align:center}
+.rsv{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--gold)}
+.rsl{font-size:11px;color:var(--muted)}
+/* RATING */
+.ri{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--bord)}
+.ri:last-child{border-bottom:none}
+.ri.me{background:rgba(139,92,246,.1);padding:11px 12px;margin:0 -12px;
+  border-radius:11px;border:1px solid rgba(139,92,246,.22);border-bottom:1px solid rgba(139,92,246,.22)}
+.rrank{font-family:'Syne',sans-serif;font-weight:800;font-size:14px;min-width:28px;text-align:center}
+.rrank.g1{color:#FFD700}.rrank.g2{color:#C0C0C0}.rrank.g3{color:#CD7F32}
+.rava{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:13px;flex-shrink:0}
+.rname{flex:1;font-family:'Syne',sans-serif;font-weight:600;font-size:13px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rsc{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--gold);flex-shrink:0}
+/* BATTLE */
+.bitem{display:flex;align-items:center;gap:11px;background:var(--surf);
+  border:1px solid var(--bord);border-radius:var(--rs);padding:13px;margin-bottom:9px}
+.bic{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;
+  justify-content:center;font-size:18px;flex-shrink:0}
+.bic.win{background:rgba(34,211,160,.15)}.bic.loss{background:rgba(244,63,94,.15)}
+.bic.draw{background:rgba(245,200,66,.15)}
+.binf{flex:1;min-width:0}
+.bopp{font-family:'Syne',sans-serif;font-weight:600;font-size:13px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btime{font-size:11px;color:var(--muted);margin-top:2px}
+.bres{font-family:'Syne',sans-serif;font-weight:800;font-size:13px;flex-shrink:0}
+.bres.win{color:var(--green)}.bres.loss{color:var(--rose)}.bres.draw{color:var(--gold)}
+/* SHIMMER */
+.shim{background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 100%);
+  background-size:200% 100%;animation:shim 1.5s infinite;border-radius:10px}
+@keyframes shim{to{background-position:-200% 0}}
+/* ACH */
+.achg{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.ach{background:var(--surf);border:1px solid var(--bord);border-radius:var(--rs);
+  padding:13px 8px;text-align:center}
+.ach.on{border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.05);
+  box-shadow:0 4px 18px rgba(245,200,66,.1)}
+.ach.off{opacity:.38;filter:grayscale(.7)}
+.achi{font-size:24px;margin-bottom:6px}
+.achn{font-family:'Syne',sans-serif;font-weight:700;font-size:10px;line-height:1.3}
+.achr{font-size:9px;color:var(--muted);margin-top:2px}
+.lvl{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:20px;
+  font-size:11px;font-family:'Syne',sans-serif;font-weight:700}
+.lvl.b{background:rgba(34,211,160,.15);color:var(--green)}
+.lvl.i{background:rgba(245,200,66,.15);color:var(--gold)}
+.lvl.a{background:rgba(244,63,94,.15);color:var(--rose)}
+.stitle{font-family:'Syne',sans-serif;font-weight:700;font-size:17px;margin-bottom:13px}
+.empty{text-align:center;padding:36px 20px;color:var(--muted)}
+.empty-i{font-size:38px;margin-bottom:9px}
+.bnav{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+  background:rgba(21,21,31,.92);backdrop-filter:blur(20px);border:1px solid var(--bord);
+  border-radius:28px;padding:9px 6px;display:flex;gap:3px;
+  box-shadow:0 8px 36px rgba(0,0,0,.5);z-index:100}
+.bb{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 14px;
+  border-radius:20px;border:none;background:transparent;color:var(--muted);
+  cursor:pointer;transition:all .2s;min-width:58px}
+.bb .bi{font-size:19px}.bb .bl{font-size:9px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:.3px}
+.bb.on{background:rgba(139,92,246,.18);color:var(--violet)}
+.srchw{position:relative;margin-bottom:13px}
+.srch{width:100%;padding:12px 14px 12px 42px;background:var(--card);
+  border:1.5px solid var(--bord);border-radius:var(--rs);color:var(--text);
+  font-size:13px;outline:none;transition:border-color .2s;font-family:'DM Sans',sans-serif}
+.srch::placeholder{color:var(--muted)}
+.srch:focus{border-color:rgba(139,92,246,.45)}
+.srchi{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="aura aura1"></div>
+<div class="aura aura2"></div>
+<div id="app">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-l">
+    <div class="ava" id="aEl">?</div>
+    <div><div class="hdr-name" id="nEl">Yuklanmoqda...</div><div class="hdr-sub" id="uEl">—</div></div>
+  </div>
+  <div id="vipEl" style="display:none"><div class="vip-pill">💎 VIP</div></div>
+</div>
+
+<!-- TOP NAV -->
+<div class="tnav">
+  <button class="tb on" onclick="nav('home',this)">🏠 Bosh</button>
+  <button class="tb" onclick="nav('learn',this)">📚 O'rganish</button>
+  <button class="tb" onclick="nav('journal',this)">📖 Jurnal</button>
+  <button class="tb" onclick="nav('rating',this)">🏆 Reyting</button>
+  <button class="tb" onclick="nav('battles',this)">⚔️ Duellar</button>
+  <button class="tb" onclick="nav('ach',this)">🎖 Nishon</button>
+</div>
+
+<!-- HOME -->
+<div class="pg on" id="pg-home">
+  <div class="sg">
+    <div class="sc go"><div class="sc-ic">⭐️</div><div class="sc-v" id="h-score">—</div><div class="sc-l">JAMI BALL</div></div>
+    <div class="sc cy"><div class="sc-ic">📚</div><div class="sc-v" id="h-words">—</div><div class="sc-l">SO'ZLAR</div></div>
+    <div class="sc ro"><div class="sc-ic">⚔️</div><div class="sc-v" id="h-batt">—</div><div class="sc-l">DUELLAR</div></div>
+    <div class="sc gr"><div class="sc-ic">👥</div><div class="sc-v" id="h-ref">—</div><div class="sc-l">REFERALLAR</div></div>
+  </div>
+  <div class="card">
+    <div class="ctitle"><span class="dot"></span>STREAK</div>
+    <div class="str-row">
+      <div class="str-num" id="h-streak">0</div>
+      <div class="str-inf"><div class="t" id="str-t">Hali boshlanmadi</div><div class="s" id="str-s">Har kun kiring!</div></div>
+    </div>
+    <div class="flames" id="flRow"></div>
+  </div>
+  <div class="card">
+    <div class="ctitle"><span class="dot" style="background:var(--gold)"></span>SOVRIN MAQSADI</div>
+    <div class="pw">
+      <div class="pm"><span>Ball to'plash</span><span class="v"><span id="pr-s">0</span> / 10 000</span></div>
+      <div class="pt"><div class="pf go" id="pr-b" style="width:0%"></div></div>
+    </div>
+    <div class="pw" style="margin-bottom:0">
+      <div class="pm"><span>Referal sharti</span><span class="v" id="pr-rs">0/1</span></div>
+      <div class="pt"><div class="pf ro" id="pr-rb" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ctitle"><span class="dot" style="background:var(--green)"></span>DARAJA</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+      <div id="h-lvl" class="lvl b">🌱 Beginner</div>
+      <div style="text-align:right">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px" id="h-grp">Guruh 1</div>
+        <div style="font-size:11px;color:var(--muted)">hozirgi guruh</div>
+      </div>
+    </div>
+    <div class="pw" style="margin-bottom:0">
+      <div class="pm"><span>Guruh progressi</span><span class="v" id="h-gpct">0%</span></div>
+      <div class="pt"><div class="pf" id="h-gb" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- O'RGANISH -->
+<div class="pg" id="pg-learn">
+  <!-- boshlash -->
+  <div id="ls">
+    <div class="card">
+      <div class="ctitle"><span class="dot" style="background:var(--cyan)"></span>SO'Z O'RGANISH</div>
+      <div style="text-align:center;padding:14px 0 10px">
+        <div style="font-size:40px;margin-bottom:10px">📚</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px;margin-bottom:6px" id="ls-grp">Guruh 1</div>
+        <div id="ls-lvl" class="lvl b" style="margin:0 auto 14px">🌱 Beginner</div>
+        <div style="display:flex;justify-content:center;gap:24px;margin-bottom:16px">
+          <div style="text-align:center"><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--cyan)" id="ls-total">0</div><div style="font-size:11px;color:var(--muted)">so'z</div></div>
+          <div style="text-align:center"><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--green)" id="ls-done">0</div><div style="font-size:11px;color:var(--muted)">o'rganilgan</div></div>
+          <div style="text-align:center"><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--gold)" id="ls-left">0</div><div style="font-size:11px;color:var(--muted)">qolgan</div></div>
+        </div>
+        <div class="pw" style="margin-bottom:16px"><div class="pt"><div class="pf" id="ls-pb" style="width:0%"></div></div></div>
+        <button class="nbtn" id="ls-btn" onclick="startLearn()">▶️ Boshlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- so'z karta -->
+  <div id="lc" style="display:none">
+    <div class="card" style="min-height:380px;display:flex;flex-direction:column">
+      <div class="ws-num" id="wc-num">1 / 10</div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 0">
+        <div class="ws-en" id="wc-en">—</div>
+        <div class="ws-pron" id="wc-pron"></div>
+        <div class="ws-uz" id="wc-uz">—</div>
+        <div class="ws-ex" id="wc-ex" style="width:100%"></div>
+      </div>
+      <button class="nbtn" id="wc-btn" onclick="nextWord()">Keyingisi →</button>
+    </div>
+  </div>
+
+  <!-- jurnal (o'rganishdan keyin) -->
+  <div id="lj" style="display:none">
+    <div class="card">
+      <div class="ctitle"><span class="dot" style="background:var(--green)"></span>O'RGANILGAN SO'ZLAR</div>
+      <div id="lj-list"></div>
+    </div>
+    <button class="nbtn qbtn" onclick="startQuiz()">🧠 Testni boshlash</button>
+    <button class="nbtn sec" onclick="showLS()">← Orqaga</button>
+  </div>
+
+  <!-- quiz -->
+  <div id="lq" style="display:none">
+    <div class="card">
+      <div class="qprog" id="qz-p">1/10</div>
+      <div class="qsrow">
+        <div class="qsi"><div class="qsv" style="color:var(--green)" id="qz-c">0</div><div class="qsl">TO'G'RI</div></div>
+        <div class="qsi"><div class="qsv" style="color:var(--rose)" id="qz-w">0</div><div class="qsl">NOTO'G'RI</div></div>
+        <div class="qsi"><div class="qsv" style="color:var(--gold)" id="qz-s">0</div><div class="qsl">BALL</div></div>
+      </div>
+      <div class="pw" style="margin-bottom:14px"><div class="pt"><div class="pf" id="qz-pb" style="width:0%"></div></div></div>
+      <div class="qword" id="qz-word">—</div>
+      <div class="qsub">Tarjimasini toping</div>
+      <div class="agrid" id="qz-ans"></div>
+    </div>
+  </div>
+
+  <!-- natija -->
+  <div id="lr" style="display:none">
+    <div class="card">
+      <div class="resbox">
+        <div class="resi" id="ri">🎉</div>
+        <div class="rest" id="rt">Zo'r!</div>
+        <div class="ress" id="rs">Natijangiz:</div>
+        <div class="rss">
+          <div class="rsi"><div class="rsv" id="rc">0</div><div class="rsl">TO'G'RI</div></div>
+          <div class="rsi"><div class="rsv" id="rw" style="color:var(--rose)">0</div><div class="rsl">NOTO'G'RI</div></div>
+          <div class="rsi"><div class="rsv">⭐</div><div class="rsl" id="rb">+0</div></div>
+        </div>
+      </div>
+      <button class="nbtn" onclick="showLS()">← Orqaga</button>
+    </div>
+  </div>
+</div>
+
+<!-- JURNAL -->
+<div class="pg" id="pg-journal">
+  <div class="stitle">📖 So'zlar Jurnali</div>
+  <div class="srchw"><span class="srchi">🔍</span><input class="srch" type="text" placeholder="So'z qidirish..." id="jSearch" oninput="filterJ()"></div>
+  <div class="tnav" style="padding:0 0 12px">
+    <button class="tb on" onclick="setJF('all',this)">Barchasi</button>
+    <button class="tb" onclick="setJF('beginner',this)">🌱 Beginner</button>
+    <button class="tb" onclick="setJF('intermediate',this)">⚡️ Inter</button>
+    <button class="tb" onclick="setJF('advanced',this)">🔥 Advanced</button>
+  </div>
+  <div class="card"><div id="jList"><div class="shim" style="height:36px;margin-bottom:7px"></div><div class="shim" style="height:36px;margin-bottom:7px"></div><div class="shim" style="height:36px"></div></div></div>
+</div>
+
+<!-- REYTING -->
+<div class="pg" id="pg-rating">
+  <div class="stitle">🏆 Top O'yinchilar</div>
+  <div class="card" style="padding:14px 18px"><div id="rList"><div class="shim" style="height:46px;margin-bottom:7px"></div><div class="shim" style="height:46px;margin-bottom:7px"></div><div class="shim" style="height:46px"></div></div></div>
+  <div class="card">
+    <div class="ctitle"><span class="dot" style="background:var(--cyan)"></span>SIZNING O'RNINGIZ</div>
+    <div style="display:flex;align-items:center;gap:13px">
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:38px;color:var(--cyan)" id="myRank">#—</div>
+      <div style="font-size:13px;color:var(--muted)" id="myRankSub">Ball yig'ing!</div>
+    </div>
+  </div>
+</div>
+
+<!-- DUELLAR -->
+<div class="pg" id="pg-battles">
+
+  <!-- O'YNASH TUGMALARI -->
+  <div class="card" style="margin-bottom:13px">
+    <div class="ctitle"><span class="dot" style="background:var(--rose)"></span>BELLASHUV</div>
+
+    <!-- RANDOM -->
+    <div style="background:linear-gradient(135deg,rgba(244,63,94,.15),rgba(139,92,246,.1));
+      border:1px solid rgba(244,63,94,.25);border-radius:14px;padding:16px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:42px;height:42px;border-radius:11px;background:rgba(244,63,94,.2);
+          display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🌐</div>
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px">Random bellashuv</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">
+            30 sek online odam kutiladi → topilmasa bot keladi
+          </div>
+        </div>
+      </div>
+      <button class="nbtn" style="background:linear-gradient(135deg,var(--rose),#be123c);margin-bottom:0"
+        onclick="startRandomBattle()">⚔️ O'ynash</button>
+    </div>
+
+    <!-- DO'ST -->
+    <div style="background:linear-gradient(135deg,rgba(139,92,246,.15),rgba(0,229,255,.08));
+      border:1px solid rgba(139,92,246,.25);border-radius:14px;padding:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:42px;height:42px;border-radius:11px;background:rgba(139,92,246,.2);
+          display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">👥</div>
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px">Do'st bilan bellashuv</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">
+            Havolani do'stingizga yuboring — g'olib 50 ball oladi!
+          </div>
+        </div>
+      </div>
+      <button class="nbtn" style="background:linear-gradient(135deg,var(--violet),#6d28d9);margin-bottom:0"
+        onclick="startFriendBattle()">🔗 Taklif yuborish</button>
+    </div>
+  </div>
+
+  <!-- STATISTIKA -->
+  <div class="stitle" style="font-size:14px;margin-bottom:10px">📊 Statistika</div>
+  <div class="sg">
+    <div class="sc gr"><div class="sc-ic">🏆</div><div class="sc-v" id="bw">—</div><div class="sc-l">G'ALIBLAR</div></div>
+    <div class="sc ro"><div class="sc-ic">💀</div><div class="sc-v" id="bl">—</div><div class="sc-l">MAG'LUBIYAT</div></div>
+  </div>
+  <div class="sg" style="margin-bottom:13px">
+    <div class="sc cy"><div class="sc-ic">🤝</div><div class="sc-v" id="bd">—</div><div class="sc-l">DRAW</div></div>
+    <div class="sc go"><div class="sc-ic">📊</div><div class="sc-v" id="bwr">—</div><div class="sc-l">WIN RATE</div></div>
+  </div>
+
+  <!-- TARIX -->
+  <div class="stitle" style="font-size:14px;margin-bottom:10px">📋 Tarix</div>
+  <div id="bList">
+    <div class="shim" style="height:64px;border-radius:12px;margin-bottom:9px"></div>
+    <div class="shim" style="height:64px;border-radius:12px;margin-bottom:9px"></div>
+    <div class="shim" style="height:64px;border-radius:12px"></div>
+  </div>
+</div>
+
+<!-- NISHONLAR -->
+<div class="pg" id="pg-ach">
+  <div class="stitle">🎖 Nishonlar</div>
+  <div class="card"><div class="achg" id="achG"></div></div>
+</div>
+
+</div><!-- /app -->
+
+<div class="bnav">
+  <button class="bb on"  onclick="nav('home',null,this)"><span class="bi">🏠</span><span class="bl">BOSH</span></button>
+  <button class="bb"     onclick="nav('learn',null,this)"><span class="bi">📚</span><span class="bl">O'RGAN</span></button>
+  <button class="bb"     onclick="nav('journal',null,this)"><span class="bi">📖</span><span class="bl">JURNAL</span></button>
+  <button class="bb"     onclick="nav('rating',null,this)"><span class="bi">🏆</span><span class="bl">TOP</span></button>
+  <button class="bb"     onclick="nav('battles',null,this)"><span class="bi">⚔️</span><span class="bl">DUEL</span></button>
+</div>
+
+<script>
+const BOT_API="https://eng-production-3bf9.up.railway.app";
+const tg=window.Telegram?.WebApp;
+if(tg){tg.ready();tg.expand();tg.setHeaderColor('#080810');tg.setBackgroundColor('#080810');}
+const TG=tg?.initDataUnsafe?.user||{};
+const UID=TG.id||null,UNAME=TG.first_name||"Foydalanuvchi",UUN=TG.username||"";
+let userData=null,allWords=[],jFilter='all';
+let learnWords=[],learnIdx=0,learnedSession=[];
+let quizWords=[],quizIdx=0,qCorrect=0,qWrong=0,qScore=0,qAnswered=false;
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const n=UNAME;
+  document.getElementById('aEl').textContent=n[0]?.toUpperCase()||'?';
+  document.getElementById('nEl').textContent=n;
+  document.getElementById('uEl').textContent=UUN?`@${UUN}`:(UID?`ID: ${UID}`:'—');
+  loadAll();
+});
+
+async function api(p, opts={}){
+  try{
+    const r=await fetch(BOT_API+p,{
+      method: opts.method||'GET',
+      headers:{'X-User-Id':String(UID||''),'X-Init-Data':tg?.initData||'','Content-Type':'application/json'},
+      body: opts.body||undefined,
+    });
+    if(!r.ok)return null;return await r.json();
+  }catch{return null;}
+}
+
+async function loadAll(){
+  const demo={score:3240,learned_words_list:demoWords(),referral_count:3,streak:12,
+    best_streak:19,level:"intermediate",current_group:5,total_groups:20,is_vip:false,
+    battles_won:8,battles_lost:3,battles_draw:1,rank:14,
+    current_group_words:demoGW(),current_group_learned_count:12,current_group_total:20};
+  let d=null;
+  if(UID) d=await api(`/api/user/${UID}`);
+  d=d||demo; userData=d;
+  if(d.is_vip) document.getElementById('vipEl').style.display='block';
+  renderHome(d); renderLearnStart(d);
+  renderJournal(d.learned_words_list||[]);
+  renderRating(); renderBattles(); renderAch(d);
+}
+
+function renderHome(d){
+  countUp('h-score',d.score||0,800);
+  countUp('h-words',(d.learned_words_list||[]).length,600);
+  countUp('h-batt',(d.battles_won||0)+(d.battles_lost||0)+(d.battles_draw||0),500);
+  countUp('h-ref',d.referral_count||0,400);
+  const st=d.streak||0;
+  document.getElementById('h-streak').textContent=st;
+  const tts=['Hali boshlanmadi',"Zo'l boshlanish!",'Energiya!','Chempion!',"Legenda!",'MASTER!'];
+  const ti=st===0?0:st<3?1:st<7?2:st<14?3:st<30?4:5;
+  document.getElementById('str-t').textContent=tts[ti];
+  document.getElementById('str-s').textContent=st>0?`Rekord: ${d.best_streak||st} kun`:'Bugun kiring!';
+  const fl=document.getElementById('flRow');fl.innerHTML='';
+  for(let i=0;i<7;i++){const lit=i<Math.min(st,7);const e=document.createElement('div');
+    e.className=`fl${lit?' lit':''}`;e.textContent=lit?'🔥':'○';fl.appendChild(e);}
+  const sc=d.score||0,pct=Math.min(100,Math.round(sc/10000*100));
+  document.getElementById('pr-s').textContent=sc.toLocaleString('uz');
+  setTimeout(()=>{document.getElementById('pr-b').style.width=pct+'%';},300);
+  const ro=(d.referral_count||0)>=1;
+  document.getElementById('pr-rs').textContent=`${d.referral_count||0}/1`;
+  setTimeout(()=>{document.getElementById('pr-rb').style.width=(ro?100:0)+'%';},400);
+  const lv=d.level||'beginner';
+  const lm={beginner:{c:'b',l:'🌱 Beginner'},intermediate:{c:'i',l:'⚡️ Intermediate'},advanced:{c:'a',l:'🔥 Advanced'}};
+  const lvI=lm[lv]||lm.beginner;
+  const pill=document.getElementById('h-lvl');pill.className=`lvl ${lvI.c}`;pill.textContent=lvI.l;
+  const grp=d.current_group||1,tot=d.total_groups||20;
+  document.getElementById('h-grp').textContent=`Guruh ${grp}`;
+  const gp=Math.round(grp/tot*100);document.getElementById('h-gpct').textContent=gp+'%';
+  setTimeout(()=>{document.getElementById('h-gb').style.width=gp+'%';},500);
+}
+
+function renderLearnStart(d){
+  const lv=d.level||'beginner';
+  const lm={beginner:{c:'b',l:'🌱 Beginner'},intermediate:{c:'i',l:'⚡️ Intermediate'},advanced:{c:'a',l:'🔥 Advanced'}};
+  const lvI=lm[lv]||lm.beginner;
+  document.getElementById('ls-grp').textContent=`Guruh ${d.current_group||1}`;
+  const p=document.getElementById('ls-lvl');p.className=`lvl ${lvI.c}`;p.textContent=lvI.l;
+  const total=d.current_group_total||20,done=d.current_group_learned_count||0,left=Math.max(0,total-done);
+  document.getElementById('ls-total').textContent=total;
+  document.getElementById('ls-done').textContent=done;
+  document.getElementById('ls-left').textContent=left;
+  document.getElementById('ls-pb').style.width=Math.round(done/total*100)+'%';
+  const btn=document.getElementById('ls-btn');
+  if(left===0){btn.textContent="📖 So'zlarni ko'rish";btn.onclick=()=>nav('journal');}
+  else{btn.textContent=done>0?'▶️ Davom etish':'▶️ Boshlash';btn.onclick=startLearn;}
+  learnWords=d.current_group_words||demoGW();learnedSession=[];
+}
+
+function showLS(){show('ls');hide('lc');hide('lj');hide('lq');hide('lr');}
+function showEl(id){['ls','lc','lj','lq','lr'].forEach(i=>hide(i));show(id);}
+
+function startLearn(){
+  if(!learnWords.length){return;}
+  learnIdx=0;learnedSession=[];showEl('lc');showWC();
+}
+
+function showWC(){
+  const w=learnWords[learnIdx];
+  if(!w){showJAfterLearn();return;}
+  const total=learnWords.length;
+  document.getElementById('wc-num').textContent=`${learnIdx+1} / ${total}`;
+  document.getElementById('wc-en').textContent=w.word||w.en||'—';
+  document.getElementById('wc-pron').textContent=w.pronunciation?`[${w.pronunciation}]`:'';
+  document.getElementById('wc-uz').textContent=w.translation||w.uz||'—';
+  const ex=w.example||'';
+  const ew=(w.word||w.en||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  document.getElementById('wc-ex').innerHTML=ex?`"${ex.replace(new RegExp('('+ew+')','gi'),'<b>$1</b>')}"`:'';
+  const btn=document.getElementById('wc-btn');
+  if(learnIdx===total-1){btn.textContent='📖 Jurnal ko\'rish →';btn.className='nbtn fin';}
+  else{btn.textContent='Keyingisi →';btn.className='nbtn';}
+  const wk=w.word||w.en;
+  if(!learnedSession.includes(wk)) learnedSession.push(wk);
+  tg?.HapticFeedback?.impactOccurred('light');
+}
+
+function nextWord(){learnIdx++;if(learnIdx>=learnWords.length)showJAfterLearn();else showWC();}
+
+function showJAfterLearn(){
+  showEl('lj');
+  const list=document.getElementById('lj-list');list.innerHTML='';
+  const dm={beginner:'b',intermediate:'i',advanced:'a'};
+  learnWords.forEach((w,i)=>{
+    const el=document.createElement('div');el.className='jw';
+    el.innerHTML=`<div class="jw-num">${i+1}</div><div class="jw-dot ${dm[w.level||'beginner']||'b'}"></div><div class="jw-en">${w.word||w.en}</div><div class="jw-uz">${w.translation||w.uz}</div>`;
+    list.appendChild(el);
+  });
+}
+
+function startQuiz(){
+  if(learnWords.length<4){return;}
+  quizWords=shuffle([...learnWords]);quizIdx=0;qCorrect=0;qWrong=0;qScore=0;qAnswered=false;
+  showEl('lq');showQQ();
+}
+
+function showQQ(){
+  if(quizIdx>=quizWords.length){showQResult();return;}
+  document.getElementById('qz-p').textContent=`${quizIdx+1}/${quizWords.length}`;
+  document.getElementById('qz-c').textContent=qCorrect;
+  document.getElementById('qz-w').textContent=qWrong;
+  document.getElementById('qz-s').textContent=qScore;
+  document.getElementById('qz-pb').style.width=Math.round(quizIdx/quizWords.length*100)+'%';
+  const w=quizWords[quizIdx];
+  document.getElementById('qz-word').textContent=w.word||w.en;
+  qAnswered=false;
+  const correct=w.translation||w.uz;
+  const pool=learnWords.filter(x=>(x.translation||x.uz)!==correct);
+  const wrong3=shuffle(pool).slice(0,3).map(x=>x.translation||x.uz);
+  const opts=shuffle([correct,...wrong3]);
+  const g=document.getElementById('qz-ans');g.innerHTML='';
+  opts.forEach(o=>{
+    const b=document.createElement('button');b.className='abtn';b.textContent=o;
+    b.onclick=()=>ansQ(o,correct,b);g.appendChild(b);
+  });
+}
+
+function ansQ(ch,cor,bEl){
+  if(qAnswered)return;qAnswered=true;
+  document.querySelectorAll('.abtn').forEach(b=>{b.disabled=true;if(b.textContent===cor)b.classList.add('correct');});
+  if(ch===cor){qCorrect++;qScore+=10;bEl.classList.add('correct');tg?.HapticFeedback?.notificationOccurred('success');}
+  else{qWrong++;qScore=Math.max(0,qScore-25);bEl.classList.add('wrong');tg?.HapticFeedback?.notificationOccurred('error');}
+  document.getElementById('qz-c').textContent=qCorrect;
+  document.getElementById('qz-w').textContent=qWrong;
+  document.getElementById('qz-s').textContent=qScore;
+  setTimeout(()=>{quizIdx++;showQQ();},900);
+}
+
+function showQResult(){
+  const total=quizWords.length,pct=Math.round(qCorrect/total*100);
+  const ic=['😢','😐','😊','🎉','🏆'];
+  const tts=["Yana urinib ko'ring!",'Yaxshilanmoqda!',"Zo'r natija!",'Ajoyib!','MUKAMMAL!'];
+  const ti=pct<40?0:pct<60?1:pct<80?2:pct<100?3:4;
+  document.getElementById('ri').textContent=ic[ti];
+  document.getElementById('rt').textContent=tts[ti];
+  document.getElementById('rs').textContent=`${qCorrect}/${total} to'g'ri — ${pct}%`;
+  document.getElementById('rc').textContent=qCorrect;
+  document.getElementById('rw').textContent=qWrong;
+  document.getElementById('rb').textContent=`+${qScore} ball`;
+  showEl('lr');
+  tg?.HapticFeedback?.notificationOccurred(pct>=80?'success':'warning');
+  // ✅ Real DB ga ball qo'shish
+  if(UID && qScore>0){
+    api('/api/score/add',{
+      method:'POST',
+      body:JSON.stringify({user_id:UID,score:qScore})
+    }).then(r=>{
+      if(r&&r.new_score!==undefined){
+        if(userData) userData.score=r.new_score;
+        countUp('scoreEl',r.new_score,600);
+      }
+    });
+  }
+}
+
+function renderJournal(words){allWords=words;renderJList();}
+function filterJ(){renderJList();}
+function setJF(f,btn){
+  jFilter=f;document.querySelectorAll('#pg-journal .tnav .tb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');renderJList();
+}
+function renderJList(){
+  const q=document.getElementById('jSearch').value.toLowerCase(),lf=jFilter;
+  let list=allWords;
+  if(lf!=='all')list=list.filter(w=>(w.level||'beginner')===lf);
+  if(q)list=list.filter(w=>(w.word||w.en||'').toLowerCase().includes(q)||(w.translation||w.uz||'').toLowerCase().includes(q));
+  const c=document.getElementById('jList');
+  if(!list.length){c.innerHTML='<div class="empty"><div class="empty-i">🔍</div><div>So\'z topilmadi</div></div>';return;}
+  const dm={beginner:'b',intermediate:'i',advanced:'a'};
+  c.innerHTML=list.map((w,i)=>`<div class="jw"><div class="jw-num">${i+1}</div><div class="jw-dot ${dm[w.level||'beginner']||'b'}"></div><div class="jw-en">${w.word||w.en}</div><div class="jw-uz">${w.translation||w.uz}</div></div>`).join('');
+}
+
+const AVC=['linear-gradient(135deg,#8b5cf6,#06b6d4)','linear-gradient(135deg,#f43f5e,#f97316)','linear-gradient(135deg,#22d3a0,#0ea5e9)','linear-gradient(135deg,#eab308,#ef4444)','linear-gradient(135deg,#a78bfa,#ec4899)'];
+async function renderRating(){
+  const med=['🥇','🥈','🥉'];
+  const c=document.getElementById('rList');
+  c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">⏳ Yuklanmoqda...</div>';
+  let top=null;
+  if(UID) top=await api('/api/rating?limit=10');
+  if(!top||!Array.isArray(top)||!top.length){
+    top=[
+      {user_id:1001,name:"Jasur T.",score:12450},
+      {user_id:1002,name:"Nilufar Q.",score:9820},
+      {user_id:1003,name:"Bobur A.",score:8340},
+      {user_id:1004,name:"Zulfiya R.",score:7210},
+      {user_id:1007,name:"Dilnoza H.",score:2980},
+    ];
+  }
+  c.innerHTML='';
+  let myRank='?';let meInTop=false;
+  top.forEach((u,i)=>{
+    const isMe=(u.user_id==UID);
+    if(isMe){myRank=i+1;meInTop=true;}
+    const el=document.createElement('div');el.className=`ri${isMe?' me':''}`;
+    const rh=i<3?`<span style="font-size:20px">${med[i]}</span>`:`<span class="rrank">${i+1}</span>`;
+    const nm=isMe?`👤 ${u.name||UNAME} (Sen)`:u.name||"Noma'lum";
+    el.innerHTML=`${rh}<div class="rava" style="background:${AVC[i%AVC.length]}">${(u.name||'?')[0].toUpperCase()}</div><div class="rname">${nm}</div><div class="rsc">${(u.score||0).toLocaleString()} ⭐</div>`;
+    c.appendChild(el);
+  });
+  if(!meInTop&&UID){const r=await api(`/api/rating/me/${UID}`);if(r&&r.rank)myRank=r.rank;}
+  const mr=parseInt(myRank)||999;
+  document.getElementById('myRank').textContent='#'+myRank;
+  document.getElementById('myRankSub').textContent=mr<=3?'🎉 Top 3 da!':mr<=10?'⭐ Top 10 da!':mr<=50?'🔝 Top 50 da!':"Ball yig'ing! 💪";
+}
+
+async function renderBattles(){
+  const demo=[{opp:"Jasur T.",result:"win",s:8,o:5,time:"Bugun 14:30"},
+    {opp:"Nilufar Q.",result:"loss",s:4,o:9,time:"Kecha 20:15"},
+    {opp:"Bobur A.",result:"win",s:10,o:7,time:"2 kun oldin"},
+    {opp:"Zulfiya R.",result:"draw",s:6,o:6,time:"3 kun oldin"},
+    {opp:"Sherzod U.",result:"win",s:9,o:3,time:"4 kun oldin"}];
+  let battles=null;if(UID) battles=await api(`/api/battles/${UID}`);battles=battles||demo;
+  const wins=battles.filter(b=>b.result==='win').length;
+  const losses=battles.filter(b=>b.result==='loss').length;
+  const draws=battles.filter(b=>b.result==='draw').length;
+  const total=wins+losses+draws;const wr=total?Math.round(wins/total*100):0;
+  countUp('bw',wins,400);countUp('bl',losses,400);countUp('bd',draws,300);
+  document.getElementById('bwr').textContent=wr+'%';
+  const c=document.getElementById('bList');c.innerHTML='';
+  if(!battles.length){c.innerHTML='<div class="empty"><div class="empty-i">⚔️</div><div>Hali duel yo\'q</div></div>';return;}
+  const ic={win:'🏆',loss:'💀',draw:'🤝'};
+  const lb={win:"G'ALIB",loss:"MAG'LUB",draw:"DRAW"};
+  battles.forEach(b=>{
+    const el=document.createElement('div');el.className='bitem';
+    el.innerHTML=`<div class="bic ${b.result}">${ic[b.result]}</div><div class="binf"><div class="bopp">vs ${b.opp}</div><div class="btime">${b.time} · ${b.s||0}:${b.o||0}</div></div><div class="bres ${b.result}">${lb[b.result]}</div>`;
+    c.appendChild(el);
+  });
+}
+
+function renderAch(d){
+  const sc=d.score||0,wl=(d.learned_words_list||[]).length,st=d.streak||0,rf=d.referral_count||0,bw=d.battles_won||0,vip=d.is_vip||false;
+  const list=[{i:'🌱',n:'Birinchi qadam',r:'1 so\'z',ok:wl>=1},{i:'📚',n:"O'quvchi",r:'50 so\'z',ok:wl>=50},
+    {i:'🧠',n:"So'z ustasi",r:'200 so\'z',ok:wl>=200},{i:'🔥',n:'3-kun streak',r:'3 kun',ok:st>=3},
+    {i:'💪',n:'Haftalik',r:'7 kun',ok:st>=7},{i:'👑',n:'Ustoz',r:'30 kun',ok:st>=30},
+    {i:'⚔️',n:'Duelist',r:'1 duel',ok:bw>=1},{i:'🏆',n:'Chempion',r:'10 duel',ok:bw>=10},
+    {i:'👥',n:'Referal',r:'1 taklif',ok:rf>=1},{i:'🚀',n:'Rekrutyor',r:'7 taklif',ok:rf>=7},
+    {i:'⭐',n:'500 ball',r:'500 ball',ok:sc>=500},{i:'💎',n:'VIP',r:'VIP',ok:vip}];
+  document.getElementById('achG').innerHTML=list.map(a=>`<div class="ach ${a.ok?'on':'off'}"><div class="achi">${a.i}</div><div class="achn">${a.n}</div><div class="achr">${a.r}</div></div>`).join('');
+}
+
+const BOT_USERNAME="VocabLearnBot"; // ← o'z bot username ingiz
+
+function startRandomBattle(){
+  tg?.HapticFeedback?.impactOccurred('medium');
+  const url=`https://t.me/${BOT_USERNAME}?start=battle_random`;
+  if(tg?.openTelegramLink) tg.openTelegramLink(url);
+  else window.open(url,'_blank');
+  tg?.close();
+}
+
+function startFriendBattle(){
+  tg?.HapticFeedback?.impactOccurred('medium');
+  const url=`https://t.me/${BOT_USERNAME}?start=fbattle_${UID||''}`;
+  if(tg?.openTelegramLink) tg.openTelegramLink(url);
+  else window.open(url,'_blank');
+  tg?.close();
+}
+
+const PG={home:0,learn:1,journal:2,rating:3,battles:4,ach:5};
+const BN={home:0,learn:1,journal:2,rating:3,battles:4};
+function nav(name){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.getElementById('pg-'+name)?.classList.add('on');
+  const tbs=document.querySelectorAll('.tnav .tb');
+  tbs.forEach(b=>b.classList.remove('on'));if(tbs[PG[name]])tbs[PG[name]].classList.add('on');
+  const bbs=document.querySelectorAll('.bb');
+  bbs.forEach(b=>b.classList.remove('on'));if(BN[name]!==undefined&&bbs[BN[name]])bbs[BN[name]].classList.add('on');
+  if(name==='learn')showLS();
+  tg?.HapticFeedback?.impactOccurred('light');
+}
+
+function show(id){const e=document.getElementById(id);if(e)e.style.display='';}
+function hide(id){const e=document.getElementById(id);if(e)e.style.display='none';}
+function countUp(id,target,dur=700){
+  const el=document.getElementById(id);if(!el)return;
+  const s=performance.now();
+  (function step(now){
+    const p=Math.min((now-s)/dur,1),e2=1-Math.pow(1-p,3);
+    el.textContent=Math.round(e2*target).toLocaleString('uz');
+    if(p<1)requestAnimationFrame(step);
+  })(performance.now());
+}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function demoWords(){
+  return [{word:'apple',translation:'olma',level:'beginner'},{word:'beautiful',translation:'chiroyli',level:'beginner'},
+    {word:'computer',translation:'kompyuter',level:'intermediate'},{word:'determine',translation:'aniqlash',level:'intermediate'},
+    {word:'eloquent',translation:'notiq',level:'advanced'},{word:'freedom',translation:'ozodlik',level:'beginner'},
+    {word:'grateful',translation:'minnatdor',level:'intermediate'},{word:"harmony",translation:"uyg'unlik",level:'advanced'},
+    {word:'journey',translation:'sayohat',level:'beginner'},{word:'knowledge',translation:'bilim',level:'beginner'}];
+}
+function demoGW(){
+  return [{word:'speak',translation:'gapirmoq',level:'intermediate',pronunciation:'spiːk',example:'Can you speak English?'},
+    {word:'listen',translation:'eshitmoq',level:'beginner',pronunciation:'ˈlɪs.ən',example:'Please listen carefully.'},
+    {word:'write',translation:'yozmoq',level:'beginner',pronunciation:'raɪt',example:'Write your name here.'},
+    {word:'understand',translation:'tushunmoq',level:'intermediate',pronunciation:'ˌʌn.dəˈstænd',example:'Do you understand?'},
+    {word:'remember',translation:'eslamoq',level:'intermediate',pronunciation:'rɪˈmem.bər',example:'I remember that day.'},
+    {word:'practice',translation:"mashq qilmoq",level:'intermediate',pronunciation:'ˈpræk.tɪs',example:'Practice every day.'},
+    {word:'improve',translation:'yaxshilamoq',level:'advanced',pronunciation:'ɪmˈpruːv',example:'Improve your skills.'},
+    {word:'achieve',translation:'erishmoq',level:'advanced',pronunciation:'əˈtʃiːv',example:'Achieve your goals.'}];
+}
+</script>
+</body>
+</html>
