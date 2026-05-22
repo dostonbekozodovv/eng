@@ -457,7 +457,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-seri
 </div>
 
 <script>
-const BOT_API="https://eng-production-3bf9.up.railway.app";
+const BOT_API="https://your-api.vercel.app";
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();tg.setHeaderColor('#080810');tg.setBackgroundColor('#080810');}
 const TG=tg?.initDataUnsafe?.user||{};
@@ -474,15 +474,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   loadAll();
 });
 
-async function api(p, opts={}){
-  try{
-    const r=await fetch(BOT_API+p,{
-      method: opts.method||'GET',
-      headers:{'X-User-Id':String(UID||''),'X-Init-Data':tg?.initData||'','Content-Type':'application/json'},
-      body: opts.body||undefined,
-    });
-    if(!r.ok)return null;return await r.json();
-  }catch{return null;}
+async function api(p){
+  try{const r=await fetch(BOT_API+p,{headers:{'X-User-Id':UID||'','X-Init-Data':tg?.initData||''}});
+    if(!r.ok)return null;return await r.json();}catch{return null;}
 }
 
 async function loadAll(){
@@ -494,6 +488,7 @@ async function loadAll(){
   if(UID) d=await api(`/api/user/${UID}`);
   d=d||demo; userData=d;
   if(d.is_vip) document.getElementById('vipEl').style.display='block';
+  await loadAllWords();
   renderHome(d); renderLearnStart(d);
   renderJournal(d.learned_words_list||[]);
   renderRating(); renderBattles(); renderAch(d);
@@ -529,6 +524,17 @@ function renderHome(d){
   setTimeout(()=>{document.getElementById('h-gb').style.width=gp+'%';},500);
 }
 
+async function loadAllWords(){
+  // words.py dan barcha so'zlarni olish
+  const level = userData?.level || 'beginner';
+  const res = await api(`/api/words?level=${level}&limit=100`);
+  if(res && res.words && res.words.length > 0){
+    allWords = res.words;
+  }
+}
+
+let allWords = [];
+
 function renderLearnStart(d){
   const lv=d.level||'beginner';
   const lm={beginner:{c:'b',l:'🌱 Beginner'},intermediate:{c:'i',l:'⚡️ Intermediate'},advanced:{c:'a',l:'🔥 Advanced'}};
@@ -543,7 +549,9 @@ function renderLearnStart(d){
   const btn=document.getElementById('ls-btn');
   if(left===0){btn.textContent="📖 So'zlarni ko'rish";btn.onclick=()=>nav('journal');}
   else{btn.textContent=done>0?'▶️ Davom etish':'▶️ Boshlash';btn.onclick=startLearn;}
-  learnWords=d.current_group_words||demoGW();learnedSession=[];
+  // API dan so'zlar kelgan bo'lsa ishlatamiz, aks holda demo
+  learnWords = (allWords.length >= 8) ? shuffle([...allWords]).slice(0, 20) : (d.current_group_words || demoGW());
+  learnedSession=[];
 }
 
 function showLS(){show('ls');hide('lc');hide('lj');hide('lq');hide('lr');}
@@ -603,7 +611,8 @@ function showQQ(){
   document.getElementById('qz-word').textContent=w.word||w.en;
   qAnswered=false;
   const correct=w.translation||w.uz;
-  const pool=learnWords.filter(x=>(x.translation||x.uz)!==correct);
+  const bigPool = allWords.length > 10 ? allWords : learnWords;
+  const pool=bigPool.filter(x=>(x.translation||x.uz)!==correct);
   const wrong3=shuffle(pool).slice(0,3).map(x=>x.translation||x.uz);
   const opts=shuffle([correct,...wrong3]);
   const g=document.getElementById('qz-ans');g.innerHTML='';
@@ -635,20 +644,7 @@ function showQResult(){
   document.getElementById('rc').textContent=qCorrect;
   document.getElementById('rw').textContent=qWrong;
   document.getElementById('rb').textContent=`+${qScore} ball`;
-  showEl('lr');
-  tg?.HapticFeedback?.notificationOccurred(pct>=80?'success':'warning');
-  // ✅ Real DB ga ball qo'shish
-  if(UID && qScore>0){
-    api('/api/score/add',{
-      method:'POST',
-      body:JSON.stringify({user_id:UID,score:qScore})
-    }).then(r=>{
-      if(r&&r.new_score!==undefined){
-        if(userData) userData.score=r.new_score;
-        countUp('scoreEl',r.new_score,600);
-      }
-    });
-  }
+  showEl('lr');tg?.HapticFeedback?.notificationOccurred(pct>=80?'success':'warning');
 }
 
 function renderJournal(words){allWords=words;renderJList();}
@@ -670,35 +666,21 @@ function renderJList(){
 
 const AVC=['linear-gradient(135deg,#8b5cf6,#06b6d4)','linear-gradient(135deg,#f43f5e,#f97316)','linear-gradient(135deg,#22d3a0,#0ea5e9)','linear-gradient(135deg,#eab308,#ef4444)','linear-gradient(135deg,#a78bfa,#ec4899)'];
 async function renderRating(){
+  const demo=[{user_id:1001,name:"Jasur T.",score:12450,is_me:false},{user_id:1002,name:"Nilufar Q.",score:9820,is_me:false},
+    {user_id:1003,name:"Bobur A.",score:8340,is_me:false},{user_id:1004,name:"Zulfiya R.",score:7210,is_me:false},
+    {user_id:UID,name:UNAME,score:userData?.score||3240,is_me:true},{user_id:1007,name:"Dilnoza H.",score:2980,is_me:false}];
+  let top=null;if(UID) top=await api('/api/rating?limit=10');top=top||demo;
   const med=['🥇','🥈','🥉'];
-  const c=document.getElementById('rList');
-  c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">⏳ Yuklanmoqda...</div>';
-  let top=null;
-  if(UID) top=await api('/api/rating?limit=10');
-  if(!top||!Array.isArray(top)||!top.length){
-    top=[
-      {user_id:1001,name:"Jasur T.",score:12450},
-      {user_id:1002,name:"Nilufar Q.",score:9820},
-      {user_id:1003,name:"Bobur A.",score:8340},
-      {user_id:1004,name:"Zulfiya R.",score:7210},
-      {user_id:1007,name:"Dilnoza H.",score:2980},
-    ];
-  }
-  c.innerHTML='';
-  let myRank='?';let meInTop=false;
+  const c=document.getElementById('rList');c.innerHTML='';let myRank='?';
   top.forEach((u,i)=>{
-    const isMe=(u.user_id==UID);
-    if(isMe){myRank=i+1;meInTop=true;}
+    const isMe=u.is_me||(u.user_id==UID);if(isMe)myRank=i+1;
     const el=document.createElement('div');el.className=`ri${isMe?' me':''}`;
-    const rh=i<3?`<span style="font-size:20px">${med[i]}</span>`:`<span class="rrank">${i+1}</span>`;
-    const nm=isMe?`👤 ${u.name||UNAME} (Sen)`:u.name||"Noma'lum";
-    el.innerHTML=`${rh}<div class="rava" style="background:${AVC[i%AVC.length]}">${(u.name||'?')[0].toUpperCase()}</div><div class="rname">${nm}</div><div class="rsc">${(u.score||0).toLocaleString()} ⭐</div>`;
+    const rh=i<3?`<span style="font-size:20px">${med[i]}</span>`:`<span class="rrank${i<3?' g'+(i+1):''}">${i+1}</span>`;
+    el.innerHTML=`${rh}<div class="rava" style="background:${AVC[i%AVC.length]}">${(u.name||'?')[0].toUpperCase()}</div><div class="rname">${isMe?'👤 '+u.name+' (Sen)':u.name}</div><div class="rsc">${(u.score||0).toLocaleString('uz')} ⭐</div>`;
     c.appendChild(el);
   });
-  if(!meInTop&&UID){const r=await api(`/api/rating/me/${UID}`);if(r&&r.rank)myRank=r.rank;}
-  const mr=parseInt(myRank)||999;
   document.getElementById('myRank').textContent='#'+myRank;
-  document.getElementById('myRankSub').textContent=mr<=3?'🎉 Top 3 da!':mr<=10?'⭐ Top 10 da!':mr<=50?'🔝 Top 50 da!':"Ball yig'ing! 💪";
+  document.getElementById('myRankSub').textContent=myRank<=3?'🎉 Top 3 da!':myRank<=10?'⭐ Top 10 da!':"Ball yig'ing!";
 }
 
 async function renderBattles(){
