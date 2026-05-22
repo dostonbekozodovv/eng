@@ -1,4 +1,16 @@
-# HTTP server run.py + api.py orqali boshqariladi
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    def log_message(self, *args):
+        pass
+
+threading.Thread(target=lambda: HTTPServer(("0.0.0.0", 8080), Handler).serve_forever(), daemon=True).start()
+
 import asyncio
 import logging
 import random
@@ -560,7 +572,7 @@ def main_kb(user_id: int = None, chat=None):
         [KeyboardButton(text="📚 So’z o‘rgan"),  KeyboardButton(text="🧠 Test")],
         [KeyboardButton(text="💰 Pul yutug'i"), KeyboardButton(text="🏆 Reyting")],
         [KeyboardButton(text="📖 Grammatika"),    KeyboardButton(text="⚙️ Daraja")],
-        [KeyboardButton(text="👥 Referal"),        KeyboardButton(text="🔥 Streak")],
+        [KeyboardButton(text="👥 Referal")],
         [KeyboardButton(text="📝 Test yaratish"),  vip_btn],
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -1087,6 +1099,17 @@ async def poll_group_selected(callback: types.CallbackQuery, state: FSMContext):
     user_id    = callback.from_user.id
     chat_id    = callback.message.chat.id
     in_group   = is_group(callback.message)
+
+    # Guruhda allaqachon quiz bormi?
+    if in_group and chat_id in GROUP_QUIZ_STATE:
+        qs = GROUP_QUIZ_STATE[chat_id]
+        if qs.get("active") or qs.get("phase") in ("lobby", "running"):
+            await callback.answer(
+                "⚠️ Guruhda allaqachon faol viktorina bor!\n/stopquiz — to'xtatish",
+                show_alert=True
+            )
+            return
+
     user       = get_user(user_id)
     if not user:
         user = get_or_create_user(user_id, callback.from_user.first_name or "Do'st", callback.from_user.username or "")
@@ -1138,7 +1161,8 @@ async def poll_group_selected(callback: types.CallbackQuery, state: FSMContext):
 
     # Guruhda — Ready tizimi
     ready_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Tayyor!", callback_data=f"quiz_ready_{chat_id}")]
+        [InlineKeyboardButton(text="✅ Tayyor!", callback_data=f"quiz_ready_{chat_id}")],
+        [InlineKeyboardButton(text="⏱ +1 daqiqa qo'shish", callback_data=f"quiz_addtime_{chat_id}")],
     ])
     await callback.message.edit_text(
         f"🎯 <b>{group_num}-guruh viktorinasi</b>\n\n"
@@ -1155,6 +1179,12 @@ async def poll_group_selected(callback: types.CallbackQuery, state: FSMContext):
 async def _lobby_timeout(chat_id: int, message_id: int):
     """30 soniya kutib, tayyor bo'lganlar bilan boshlayman"""
     await asyncio.sleep(30)
+    # Extra time qo'shilganmi?
+    qs_check = GROUP_QUIZ_STATE.get(chat_id)
+    if qs_check and qs_check.get("extra_time", 0) > 0:
+        extra_mins = qs_check["extra_time"]
+        qs_check["extra_time"] = 0  # reset
+        await asyncio.sleep(extra_mins * 60)
     qs = GROUP_QUIZ_STATE.get(chat_id)
     if not qs or qs.get("phase") != "lobby":
         return
@@ -1189,6 +1219,28 @@ async def _lobby_timeout(chat_id: int, message_id: int):
         pass
     await _send_group_poll(chat_id)
 
+@dp.callback_query(F.data.startswith("quiz_addtime_"))
+async def quiz_addtime_cb(callback: types.CallbackQuery):
+    """Lobby ga +1 daqiqa qo'shish"""
+    chat_id = int(callback.data.split("_")[2])
+    qs = GROUP_QUIZ_STATE.get(chat_id)
+    if not qs or qs.get("phase") != "lobby":
+        await callback.answer("⚠️ Lobby allaqachon tugagan!", show_alert=True)
+        return
+    # Extra time flagini qo'shish — _lobby_timeout tekshiradi
+    extra = qs.get("extra_time", 0)
+    if extra >= 2:
+        await callback.answer("⚠️ Ko'pi bilan 2 daqiqa qo'shish mumkin!", show_alert=True)
+        return
+    qs["extra_time"] = extra + 1
+    count = len(qs.get("ready_users", {}))
+    ready_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"✅ Tayyor! ({count} kishi)", callback_data=f"quiz_ready_{chat_id}")],
+        [InlineKeyboardButton(text=f"⏱ +1 daqiqa qo'shish ({2 - qs['extra_time']} marta qoldi)", callback_data=f"quiz_addtime_{chat_id}")],
+    ])
+    await callback.message.edit_reply_markup(reply_markup=ready_kb)
+    await callback.answer(f"✅ +1 daqiqa qo'shildi! Jami {30 + qs['extra_time']*60} soniya kutiladi.")
+
 @dp.callback_query(F.data.startswith("quiz_ready_"))
 async def quiz_ready_cb(callback: types.CallbackQuery):
     """Foydalanuvchi Ready bosdi"""
@@ -1210,7 +1262,8 @@ async def quiz_ready_cb(callback: types.CallbackQuery):
     names = "\n".join([f"✅ {n}" for n in list(qs["ready_users"].values())])
 
     ready_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"✅ Tayyor! ({count} kishi)", callback_data=f"quiz_ready_{chat_id}")]
+        [InlineKeyboardButton(text=f"✅ Tayyor! ({count} kishi)", callback_data=f"quiz_ready_{chat_id}")],
+        [InlineKeyboardButton(text="⏱ +1 daqiqa qo'shish", callback_data=f"quiz_addtime_{chat_id}")],
     ])
     try:
         await callback.message.edit_text(
