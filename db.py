@@ -34,7 +34,8 @@ def init_db():
             id SERIAL PRIMARY KEY,
             referrer_id BIGINT REFERENCES users(user_id),
             referred_id BIGINT REFERENCES users(user_id),
-            created_at TIMESTAMP DEFAULT NOW()
+            created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(referred_id)
         );
         CREATE TABLE IF NOT EXISTS vip_requests (
             id SERIAL PRIMARY KEY,
@@ -78,14 +79,18 @@ def get_or_create_user(user_id: int, name: str, username: str, referrer_id: int 
         """, (user_id, name, username or '', referrer_id, str(date.today()), 1, 1))
 
         if referrer_id and referrer_id != user_id:
-            cur.execute(
-                "UPDATE users SET referral_count = referral_count + 1 WHERE user_id = %s",
-                (referrer_id,)
-            )
-            cur.execute(
-                "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s)",
-                (referrer_id, user_id)
-            )
+            # Tekshirish: bu user avval ro'yxatdan o'tganmi?
+            cur.execute("SELECT 1 FROM referrals WHERE referred_id = %s", (user_id,))
+            already = cur.fetchone()
+            if not already:
+                cur.execute(
+                    "UPDATE users SET referral_count = referral_count + 1 WHERE user_id = %s",
+                    (referrer_id,)
+                )
+                cur.execute(
+                    "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT (referred_id) DO NOTHING",
+                    (referrer_id, user_id)
+                )
         conn.commit()
         cur.close()
         conn.close()
