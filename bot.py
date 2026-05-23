@@ -169,6 +169,12 @@ class ResetOneRefState(StatesGroup):
 class SurveyState(StatesGroup):
     running = State()
 
+class BrainState(StatesGroup):
+    waiting_answer = State()
+
+class BrainAdminState(StatesGroup):
+    waiting_question = State()
+
 class BattleState(StatesGroup):
     waiting_opponent = State()   # random matchmaking
     in_battle        = State()   # savol jarayonida
@@ -572,7 +578,7 @@ def main_kb(user_id: int = None, chat=None):
         [KeyboardButton(text="📚 So’z o‘rgan"),  KeyboardButton(text="🧠 Test")],
         [KeyboardButton(text="💰 Pul yutug'i"), KeyboardButton(text="🏆 Reyting")],
         [KeyboardButton(text="📖 Grammatika"),    KeyboardButton(text="⚙️ Daraja")],
-        [KeyboardButton(text="👥 Referal"),        KeyboardButton(text="🔥 Streak")],
+        [KeyboardButton(text="👥 Referal"),        KeyboardButton(text="🧩 Miyya charxlash")],
         [KeyboardButton(text="📝 Test yaratish"),  vip_btn],
     ]
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -2323,7 +2329,6 @@ async def grammar_answer(callback: types.CallbackQuery, state: FSMContext):
 # ══════════════════════════════════════════════════
 # STREAK
 # ══════════════════════════════════════════════════
-@dp.message(F.text == "🔥 Streak")
 async def show_streak(message: types.Message):
     user   = get_user(message.from_user.id)
     streak = user.get("streak", 0)
@@ -2836,7 +2841,6 @@ async def guide_section(callback: types.CallbackQuery):
 # ══════════════════════════════════════════════════
 # TAKLIF VA FIKR
 # ══════════════════════════════════════════════════
-@dp.message(F.text == "💬 Taklif & Fikr")
 async def feedback_menu(message: types.Message, state: FSMContext):
     await state.set_state(FeedbackState.waiting)
     await message.answer(
@@ -2885,7 +2889,6 @@ async def feedback_receive(message: types.Message, state: FSMContext):
 # ══════════════════════════════════════════════════
 USER_TESTS: dict = {}  # { user_id: [{"q": ..., "options": [...], "answer": ...}] }
 
-@dp.message(F.text == "📝 Test yaratish")
 async def user_test_menu(message: types.Message):
     user_id = message.from_user.id
     my_tests = USER_TESTS.get(user_id, [])
@@ -4234,7 +4237,7 @@ async def weekly_bonus_task():
             top_list = get_top_referrals(1)
             if top_list:
                 winner = top_list[0]
-                if winner.get("referral_count", 0) >= 5:
+                if winner.get("referral_count", 0) >= 7:
                     add_referral_earnings(winner["user_id"], 10000)
                     try:
                         await bot.send_message(
@@ -4253,7 +4256,7 @@ async def weekly_bonus_task():
                                 admin_id,
                                 f"ℹ️ Haftalik bonus berilmadi.\n"
                                 f"Eng ko'p: <b>{winner.get('referral_count',0)} ta</b>\n"
-                                f"Kerak: kamida <b>5 ta</b>"
+                                f"Kerak: kamida <b>7 ta</b>"
                             )
                         except Exception:
                             pass
@@ -5878,6 +5881,308 @@ async def main():
     asyncio.create_task(weekly_bonus_task())
     asyncio.create_task(vip_expiry_task())
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+
+
+
+# ══════════════════════════════════════════════════
+# 🧩 MIYYA CHARXLASH — Admin savol qo'shadi, user javob beradi
+# ══════════════════════════════════════════════════
+
+# Kunlik savollar DB da saqlanadi, shuning uchun DB ga jadval kerak
+# Botni ishga tushirishda jadval yaratiladi (init_db da)
+# Hozir xotirada saqlaymiz (restart bo'lsa saqlanadi DB da)
+
+import json as _json
+
+BRAIN_QUESTION = {}  # {question: str, answer: str} — joriy savol
+
+def get_brain_question():
+    """DB dan joriy savolni olish"""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS brain_quiz (
+                id SERIAL PRIMARY KEY,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                added_by BIGINT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+        cur.execute("SELECT question, answer FROM brain_quiz ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if row:
+            return {"question": row[0], "answer": row[1]}
+        return None
+    except Exception as e:
+        logger.error(f"brain_quiz xato: {e}")
+        return None
+
+def get_brain_answered(user_id):
+    """Bugun javob berganmi?"""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS brain_answers (
+                user_id BIGINT,
+                date DATE,
+                attempts INT DEFAULT 0,
+                correct BOOLEAN DEFAULT FALSE,
+                PRIMARY KEY (user_id, date)
+            )
+        """)
+        conn.commit()
+        cur.execute(
+            "SELECT attempts, correct FROM brain_answers WHERE user_id=%s AND date=CURRENT_DATE",
+            (user_id,)
+        )
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if row:
+            return {"attempts": row[0], "correct": row[1]}
+        return {"attempts": 0, "correct": False}
+    except Exception as e:
+        logger.error(f"brain_answers xato: {e}")
+        return {"attempts": 0, "correct": False}
+
+def save_brain_answer(user_id, correct):
+    """Javob yozish"""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO brain_answers (user_id, date, attempts, correct)
+            VALUES (%s, CURRENT_DATE, 1, %s)
+            ON CONFLICT (user_id, date) DO UPDATE
+            SET attempts = brain_answers.attempts + 1,
+                correct = brain_answers.correct OR EXCLUDED.correct
+        """, (user_id, correct))
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        logger.error(f"save_brain_answer xato: {e}")
+
+
+# ── Foydalanuvchi: 🧩 Miyya charxlash ──────────────
+@dp.message(F.text == "🧩 Miyya charxlash")
+async def brain_menu(message: types.Message, state: FSMContext):
+    if is_group(message):
+        return
+    user_id = message.from_user.id
+    q = get_brain_question()
+    if not q:
+        await message.answer(
+            "🧩 <b>Miyya charxlash</b>\n\n"
+            "❌ Hozircha savol yo'q.\n"
+            "Admin tez orada savol qo'shadi! ⏳"
+        )
+        return
+
+    info = get_brain_answered(user_id)
+    attempts = info["attempts"]
+    correct = info["correct"]
+
+    if correct:
+        await message.answer(
+            "🧩 <b>Miyya charxlash</b>\n\n"
+            f"❓ <b>Savol:</b> {q['question']}\n\n"
+            "✅ Bugun to'g'ri javob berdingiz! +50 ball oldiniz 🎉\n"
+            "Ertaga yangi savol bo'ladi!"
+        )
+        return
+
+    if attempts >= 2:
+        await message.answer(
+            "🧩 <b>Miyya charxlash</b>\n\n"
+            f"❓ <b>Savol:</b> {q['question']}\n\n"
+            f"❌ Bugun 2 ta urinishdan foydalandingiz.\n"
+            f"💡 <b>To'g'ri javob:</b> <tg-spoiler>{q['answer']}</tg-spoiler>\n"
+            "Ertaga yangi savol bilan qaytib keling! 💪"
+        )
+        return
+
+    qolgan = 2 - attempts
+    await message.answer(
+        "🧩 <b>Miyya charxlash</b>\n\n"
+        f"❓ <b>Savol:</b> {q['question']}\n\n"
+        f"✍️ Javobingizni yozing (qolgan urinish: {qolgan})\n"
+        "💡 <i>To'g'ri javob uchun +50 ball!</i>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="brain_cancel")]
+        ])
+    )
+    await state.set_state(BrainState.waiting_answer)
+
+
+@dp.message(BrainState.waiting_answer)
+async def brain_answer_handler(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    user_answer = message.text.strip().lower()
+
+    q = get_brain_question()
+    if not q:
+        await state.clear()
+        return
+
+    info = get_brain_answered(user_id)
+    if info["correct"] or info["attempts"] >= 2:
+        await state.clear()
+        await brain_menu(message, state)
+        return
+
+    correct_answer = q["answer"].strip().lower()
+    is_correct = user_answer == correct_answer
+
+    save_brain_answer(user_id, is_correct)
+
+    if is_correct:
+        add_score(user_id, 50)
+        await state.clear()
+        await message.answer(
+            "🎉 <b>To'g'ri javob!</b>\n\n"
+            f"✅ <b>{q['answer']}</b> — ha, aynan!\n"
+            "⭐ +50 ball qo'shildi!",
+            reply_markup=main_kb(user_id)
+        )
+    else:
+        info2 = get_brain_answered(user_id)
+        qolgan = 2 - info2["attempts"]
+        if qolgan > 0:
+            await message.answer(
+                f"❌ Noto'g'ri! Yana {qolgan} ta urinish qoldi.\n"
+                "Qayta urinib ko'ring 👇"
+            )
+        else:
+            await state.clear()
+            await message.answer(
+                "❌ <b>Noto'g'ri!</b> Urinishlar tugadi.\n\n"
+                f"💡 <b>To'g'ri javob:</b> <tg-spoiler>{q['answer']}</tg-spoiler>\n"
+                "Ertaga yangi savol! 💪",
+                reply_markup=main_kb(user_id)
+            )
+
+
+@dp.callback_query(F.data == "brain_cancel")
+async def brain_cancel(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text("❌ Bekor qilindi.")
+    await callback.answer()
+
+
+# ── Admin: Miyya charxlash savol qo'shish ──────────
+@dp.message(F.text == "/brain_add")
+async def brain_add_cmd(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    await message.answer(
+        "🧩 <b>Yangi savol qo'shish</b>\n\n"
+        "Savol va javobni quyidagi formatda yozing:\n\n"
+        "<code>Savol matni\nJavob matni</code>\n\n"
+        "Masalan:\n"
+        "<code>Qaysi hayvon uxlamasdan dengizda suzadi?\nAkula</code>"
+    )
+    await state.set_state(BrainAdminState.waiting_question)
+
+
+@dp.message(BrainAdminState.waiting_question)
+async def brain_add_handler(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        await state.clear()
+        return
+
+    text = message.text.strip()
+    parts = text.split("\n", 1)
+
+    if len(parts) < 2:
+        await message.answer(
+            "❌ Format noto'g'ri!\n\n"
+            "Savol va javobni YANGI QATORDA yozing:\n"
+            "<code>Savol matni\nJavob matni</code>"
+        )
+        return
+
+    question = parts[0].strip()
+    answer = parts[1].strip()
+
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS brain_quiz (
+                id SERIAL PRIMARY KEY,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                added_by BIGINT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute(
+            "INSERT INTO brain_quiz (question, answer, added_by) VALUES (%s, %s, %s)",
+            (question, answer, message.from_user.id)
+        )
+        conn.commit()
+        cur.close(); conn.close()
+
+        await state.clear()
+        await message.answer(
+            "✅ <b>Savol qo'shildi!</b>\n\n"
+            f"❓ <b>Savol:</b> {question}\n"
+            f"💡 <b>Javob:</b> {answer}\n\n"
+            "Barcha foydalanuvchilar ko'ra oladi."
+        )
+    except Exception as e:
+        await state.clear()
+        await message.answer(f"❌ Xato: {e}")
+
+
+@dp.message(F.text == "/brain_list")
+async def brain_list_cmd(message: types.Message):
+    """Admin: barcha savollar ro'yxati"""
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT id, question, answer FROM brain_quiz ORDER BY id DESC LIMIT 10")
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+
+        if not rows:
+            await message.answer("❌ Savollar yo'q.")
+            return
+
+        text = "🧩 <b>So'nggi 10 ta savol:</b>\n\n"
+        for row in rows:
+            text += f"<b>#{row[0]}</b> ❓ {row[1]}\n💡 {row[2]}\n\n"
+        await message.answer(text)
+    except Exception as e:
+        await message.answer(f"❌ Xato: {e}")
+
+
+@dp.message(F.text.startswith("/brain_delete"))
+async def brain_delete_cmd(message: types.Message):
+    """Admin: /brain_delete 5 — ID bo'yicha o'chirish"""
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    parts = message.text.split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.answer("Foydalanish: <code>/brain_delete ID</code>\nID ni /brain_list dan toping")
+        return
+    q_id = int(parts[1])
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM brain_quiz WHERE id=%s", (q_id,))
+        conn.commit()
+        cur.close(); conn.close()
+        await message.answer(f"✅ #{q_id} savol o'chirildi.")
+    except Exception as e:
+        await message.answer(f"❌ Xato: {e}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
