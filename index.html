@@ -474,21 +474,33 @@ document.addEventListener('DOMContentLoaded',()=>{
   loadAll();
 });
 
-async function api(p){
-  try{const r=await fetch(BOT_API+p,{headers:{'X-User-Id':UID||'','X-Init-Data':tg?.initData||''}});
-    if(!r.ok)return null;return await r.json();}catch{return null;}
+async function api(p,opts={}){
+  try{
+    const r=await fetch(BOT_API+p,{
+      method:opts.method||'GET',
+      headers:{'X-User-Id':String(UID||''),'X-Init-Data':tg?.initData||'','Content-Type':'application/json'},
+      body:opts.body||undefined,
+    });
+    if(!r.ok)return null;return await r.json();
+  }catch{return null;}
 }
 
 async function loadAll(){
-  const demo={score:3240,learned_words_list:demoWords(),referral_count:3,streak:12,
-    best_streak:19,level:"intermediate",current_group:5,total_groups:20,is_vip:false,
-    battles_won:8,battles_lost:3,battles_draw:1,rank:14,
-    current_group_words:demoGW(),current_group_learned_count:12,current_group_total:20};
+  const demo={score:0,learned_words_list:[],referral_count:0,streak:0,
+    best_streak:0,level:"beginner",current_group:1,total_groups:20,is_vip:false,
+    battles_won:0,battles_lost:0,battles_draw:0,rank:"?",
+    current_group_words:demoGW(),current_group_learned_count:0,current_group_total:20};
   let d=null;
-  if(UID) d=await api(`/api/user/${UID}`);
-  d=d||demo; userData=d;
+  if(UID){
+    d=await api(`/api/user/${UID}`);
+  }
+  if(!d){
+    // UID yo'q yoki API javob bermadi
+    d=demo;
+    if(!UID) console.warn("UID topilmadi - Telegram WebApp dan oching");
+  }
+  userData=d;
   if(d.is_vip) document.getElementById('vipEl').style.display='block';
-  await loadAllWords();
   renderHome(d); renderLearnStart(d);
   renderJournal(d.learned_words_list||[]);
   renderRating(); renderBattles(); renderAch(d);
@@ -524,17 +536,6 @@ function renderHome(d){
   setTimeout(()=>{document.getElementById('h-gb').style.width=gp+'%';},500);
 }
 
-async function loadAllWords(){
-  // words.py dan barcha so'zlarni olish
-  const level = userData?.level || 'beginner';
-  const res = await api(`/api/words?level=${level}&limit=100`);
-  if(res && res.words && res.words.length > 0){
-    allWords = res.words;
-  }
-}
-
-let allWords = [];
-
 function renderLearnStart(d){
   const lv=d.level||'beginner';
   const lm={beginner:{c:'b',l:'🌱 Beginner'},intermediate:{c:'i',l:'⚡️ Intermediate'},advanced:{c:'a',l:'🔥 Advanced'}};
@@ -549,9 +550,7 @@ function renderLearnStart(d){
   const btn=document.getElementById('ls-btn');
   if(left===0){btn.textContent="📖 So'zlarni ko'rish";btn.onclick=()=>nav('journal');}
   else{btn.textContent=done>0?'▶️ Davom etish':'▶️ Boshlash';btn.onclick=startLearn;}
-  // API dan so'zlar kelgan bo'lsa ishlatamiz, aks holda demo
-  learnWords = (allWords.length >= 8) ? shuffle([...allWords]).slice(0, 20) : (d.current_group_words || demoGW());
-  learnedSession=[];
+  learnWords=d.current_group_words||demoGW();learnedSession=[];
 }
 
 function showLS(){show('ls');hide('lc');hide('lj');hide('lq');hide('lr');}
@@ -611,8 +610,7 @@ function showQQ(){
   document.getElementById('qz-word').textContent=w.word||w.en;
   qAnswered=false;
   const correct=w.translation||w.uz;
-  const bigPool = allWords.length > 10 ? allWords : learnWords;
-  const pool=bigPool.filter(x=>(x.translation||x.uz)!==correct);
+  const pool=learnWords.filter(x=>(x.translation||x.uz)!==correct);
   const wrong3=shuffle(pool).slice(0,3).map(x=>x.translation||x.uz);
   const opts=shuffle([correct,...wrong3]);
   const g=document.getElementById('qz-ans');g.innerHTML='';
