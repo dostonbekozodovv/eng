@@ -486,20 +486,13 @@ async function api(p,opts={}){
 }
 
 async function loadAll(){
-  const demo={score:0,learned_words_list:[],referral_count:0,streak:0,
-    best_streak:0,level:"beginner",current_group:1,total_groups:20,is_vip:false,
-    battles_won:0,battles_lost:0,battles_draw:0,rank:"?",
-    current_group_words:demoGW(),current_group_learned_count:0,current_group_total:20};
+  const demo={score:3240,learned_words_list:demoWords(),referral_count:3,streak:12,
+    best_streak:19,level:"intermediate",current_group:5,total_groups:20,is_vip:false,
+    battles_won:8,battles_lost:3,battles_draw:1,rank:14,
+    current_group_words:demoGW(),current_group_learned_count:12,current_group_total:20};
   let d=null;
-  if(UID){
-    d=await api(`/api/user/${UID}`);
-  }
-  if(!d){
-    // UID yo'q yoki API javob bermadi
-    d=demo;
-    if(!UID) console.warn("UID topilmadi - Telegram WebApp dan oching");
-  }
-  userData=d;
+  if(UID) d=await api(`/api/user/${UID}`);
+  d=d||demo; userData=d;
   if(d.is_vip) document.getElementById('vipEl').style.display='block';
   renderHome(d); renderLearnStart(d);
   renderJournal(d.learned_words_list||[]);
