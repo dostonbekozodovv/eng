@@ -51,6 +51,8 @@ def init_db():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS current_group INT DEFAULT 1;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_expires TIMESTAMP;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_notified BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE referrals ADD COLUMN IF NOT EXISTS id SERIAL;",
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = \'referrals_referred_id_key\') THEN ALTER TABLE referrals ADD CONSTRAINT referrals_referred_id_key UNIQUE (referred_id); END IF; END $$;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS prize_claimed BOOLEAN DEFAULT FALSE;",
     ]:
         cur.execute(col_sql)
@@ -79,18 +81,19 @@ def get_or_create_user(user_id: int, name: str, username: str, referrer_id: int 
         """, (user_id, name, username or '', referrer_id, str(date.today()), 1, 1))
 
         if referrer_id and referrer_id != user_id:
-            # Tekshirish: bu user avval ro'yxatdan o'tganmi?
+            # Tekshirish: bu user avval kimgadir referral berganmi?
             cur.execute("SELECT 1 FROM referrals WHERE referred_id = %s", (user_id,))
-            already = cur.fetchone()
-            if not already:
-                cur.execute(
-                    "UPDATE users SET referral_count = referral_count + 1 WHERE user_id = %s",
-                    (referrer_id,)
-                )
+            if not cur.fetchone():
                 cur.execute(
                     "INSERT INTO referrals (referrer_id, referred_id) VALUES (%s, %s) ON CONFLICT (referred_id) DO NOTHING",
                     (referrer_id, user_id)
                 )
+                # Faqat muvaffaqiyatli insert bo'lsa count oshirish
+                if cur.rowcount > 0:
+                    cur.execute(
+                        "UPDATE users SET referral_count = referral_count + 1 WHERE user_id = %s",
+                        (referrer_id,)
+                    )
         conn.commit()
         cur.close()
         conn.close()
