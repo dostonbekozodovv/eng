@@ -4094,13 +4094,13 @@ async def weekly_bonus_task():
             if top_list:
                 winner = top_list[0]
                 if winner.get("referral_count", 0) >= 7:
-                    add_referral_earnings(winner["user_id"], 10000)
+                    add_referral_earnings(winner["user_id"], 5000)
                     try:
                         await bot.send_message(
                             winner["user_id"],
                             f"🎉 <b>HAFTALIK G'OLIB!</b> 🏆\n\n"
                             f"👥 Taklif: <b>{winner['referral_count']} ta</b>\n"
-                            f"💰 <b>+10 000 so'm</b> bonus!\n\n"
+                            f"💰 <b>+5 000 so'm</b> bonus!\n\n"
                             f"Tabriklaymiz! 🎊"
                         )
                     except Exception:
