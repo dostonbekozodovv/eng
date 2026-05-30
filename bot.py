@@ -2566,7 +2566,7 @@ async def show_top_ref(callback: types.CallbackQuery):
         medal = medals[i-1] if i <= 3 else f"{i}."
         link  = _user_profile_link(u)
         text += f"{medal} {link} — {u['referral_count']} 👤\n"
-    text += f"\n<i>Har juma 5+ taklif qilgan g'olib 10 000 so'm yutadi! 🏆</i>"
+    text += f"\n<i>Har juma 7+ taklif qilgan g'olib 5 000 so'm yutadi! 🏆</i>"
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⭐ Ball reytingi", callback_data="rank_score")],
         [InlineKeyboardButton(text="🏠 Bosh menyu",    callback_data="back_menu")],
